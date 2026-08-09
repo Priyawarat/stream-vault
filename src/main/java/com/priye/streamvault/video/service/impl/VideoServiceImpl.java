@@ -7,6 +7,8 @@ import com.priye.streamvault.video.dto.response.VideoListResponse;
 import com.priye.streamvault.video.dto.response.VideoStreamData;
 import com.priye.streamvault.video.dto.response.VideoUploadResponse;
 import com.priye.streamvault.video.entity.Video;
+import com.priye.streamvault.video.kafka.VideoEvent;
+import com.priye.streamvault.video.kafka.VideoEventProducer;
 import com.priye.streamvault.video.repository.VideoRepository;
 import com.priye.streamvault.video.service.StorageService;
 import com.priye.streamvault.video.service.VideoService;
@@ -29,6 +31,7 @@ public class VideoServiceImpl implements VideoService {
 
     private final VideoRepository videoRepository;
     private final StorageService storageService;
+    private final VideoEventProducer videoEventProducer;
 
     @Override
     public VideoUploadResponse upload(UUID userId, VideoUploadRequest request) {
@@ -61,6 +64,10 @@ public class VideoServiceImpl implements VideoService {
                     .build();
 
             video = videoRepository.save(video);
+
+            VideoEvent event = new VideoEvent("VIDEO_UPLOADED", video.getId());
+
+            videoEventProducer.publishVideoUploaded(event);
 
             return new VideoUploadResponse(
                     video.getId(),
