@@ -1,6 +1,7 @@
 package com.priye.streamvault.video.controller;
 
 import com.priye.streamvault.video.dto.request.VideoUploadRequest;
+import com.priye.streamvault.video.dto.response.VideoListResponse;
 import com.priye.streamvault.video.dto.response.VideoStreamData;
 import com.priye.streamvault.video.dto.response.VideoUploadResponse;
 import com.priye.streamvault.video.service.VideoService;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -46,5 +48,10 @@ public class VideoController {
     @GetMapping("/{videoId}/stream")
     public ResponseEntity<StreamingResponseBody> streamVideo(@PathVariable UUID videoId, @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
         return videoService.stream(videoId, range);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<VideoListResponse>> getAllVideos() {
+        return ResponseEntity.ok(videoService.getAllVideos());
     }
 }
