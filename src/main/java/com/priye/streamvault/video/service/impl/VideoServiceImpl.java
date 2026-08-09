@@ -3,6 +3,7 @@ package com.priye.streamvault.video.service.impl;
 import com.priye.streamvault.common.enums.VideoStatus;
 import com.priye.streamvault.common.exception.ResourceNotFoundException;
 import com.priye.streamvault.video.dto.request.VideoUploadRequest;
+import com.priye.streamvault.video.dto.response.VideoListResponse;
 import com.priye.streamvault.video.dto.response.VideoStreamData;
 import com.priye.streamvault.video.dto.response.VideoUploadResponse;
 import com.priye.streamvault.video.entity.Video;
@@ -202,5 +203,23 @@ public class VideoServiceImpl implements VideoService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to stream video", e);
         }
+    }
+
+    @Override
+    public List<VideoListResponse> getAllVideos() {
+
+        List<VideoListResponse> videoListResponses = videoRepository.findByStatus(VideoStatus.UPLOADED)
+                .stream()
+                .map(video -> new VideoListResponse(
+                        video.getId(),
+                        video.getOriginalFileName(),
+                        video.getFileSize(),
+                        video.getContentType(),
+                        video.getStatus(),
+                        video.getCreatedAt()
+                ))
+                .toList();
+
+        return videoListResponses;
     }
 }
