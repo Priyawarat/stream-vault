@@ -41,4 +41,19 @@ public class Video extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private VideoStatus status;
+
+    @Column
+    private Double duration;
+
+    @Column
+    private Integer width;
+
+    @Column
+    private Integer height;
+
+    @Column(length = 50)
+    private String videoCodec;
+
+    @Column(length = 50)
+    private String audioCodec;
 }
