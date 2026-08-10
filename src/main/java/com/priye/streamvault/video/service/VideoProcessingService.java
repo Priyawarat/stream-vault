@@ -1,4 +1,9 @@
 package com.priye.streamvault.video.service;
 
-public class VideoProcessingService {
+import java.util.UUID;
+
+public interface VideoProcessingService {
+
+    void processVideo(UUID videoId);
+
 }

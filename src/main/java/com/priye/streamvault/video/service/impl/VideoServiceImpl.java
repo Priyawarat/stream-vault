@@ -7,14 +7,14 @@ import com.priye.streamvault.video.dto.response.VideoListResponse;
 import com.priye.streamvault.video.dto.response.VideoStreamData;
 import com.priye.streamvault.video.dto.response.VideoUploadResponse;
 import com.priye.streamvault.video.entity.Video;
-import com.priye.streamvault.video.kafka.VideoEvent;
-import com.priye.streamvault.video.kafka.VideoEventProducer;
 import com.priye.streamvault.video.repository.VideoRepository;
+import com.priye.streamvault.video.service.OutboxService;
 import com.priye.streamvault.video.service.StorageService;
 import com.priye.streamvault.video.service.VideoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.core.io.Resource;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -31,8 +31,9 @@ public class VideoServiceImpl implements VideoService {
 
     private final VideoRepository videoRepository;
     private final StorageService storageService;
-    private final VideoEventProducer videoEventProducer;
+    private final OutboxService outboxService;
 
+    @Transactional
     @Override
     public VideoUploadResponse upload(UUID userId, VideoUploadRequest request) {
 
@@ -65,9 +66,8 @@ public class VideoServiceImpl implements VideoService {
 
             video = videoRepository.save(video);
 
-            VideoEvent event = new VideoEvent("VIDEO_UPLOADED", video.getId());
-
-            videoEventProducer.publishVideoUploaded(event);
+            // Save event in the SAME DB transaction
+            outboxService.saveVideoUploadedEvent(video.getId());
 
             return new VideoUploadResponse(
                     video.getId(),
