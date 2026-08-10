@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CompletableFuture;
+
 @Component
 @RequiredArgsConstructor
 public class VideoEventProducer {
@@ -12,8 +14,7 @@ public class VideoEventProducer {
 
     private final KafkaTemplate<String, VideoEvent> kafkaTemplate;
 
-    public void publishVideoUploaded(VideoEvent event) {
-
-        kafkaTemplate.send(TOPIC, event.videoId().toString(), event);
+    public CompletableFuture<?> publishVideoUploaded(VideoEvent event) {
+        return kafkaTemplate.send(TOPIC, event.videoId().toString(), event);
     }
 }
