@@ -68,7 +68,7 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
             ffmpegService.process(inputPath, outputPath);
 
             // Transaction 2: PROCESSING → READY → COMMIT
-            videoStatusService.markReady(videoId, result); //TODO: Add the output path to store.
+            videoStatusService.markReady(videoId, result, outputPath);
 
             log.info("Video processing completed successfully. videoId={}, status={}", videoId, VideoStatus.READY);
 
