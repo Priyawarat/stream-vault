@@ -31,7 +31,7 @@ public class VideoStatusServiceImpl implements VideoStatusService {
 
     @Transactional
     @Override
-    public void markReady(UUID videoId, FFprobeResult result) {
+    public void markReady(UUID videoId, FFprobeResult result, String processedFilePath) {
         Video video = videoRepository.findById(videoId).orElseThrow(() ->
                 new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
         video.setStatus(VideoStatus.READY);
@@ -40,6 +40,7 @@ public class VideoStatusServiceImpl implements VideoStatusService {
         video.setHeight(result.height());
         video.setVideoCodec(result.videoCodec());
         video.setAudioCodec(result.audioCodec());
+        video.setProcessedFilePath(processedFilePath);
         videoRepository.save(video);
     }
 

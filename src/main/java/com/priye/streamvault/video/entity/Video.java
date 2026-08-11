@@ -29,8 +29,13 @@ public class Video extends BaseEntity {
     @Column(nullable = false, length = 255)
     private String storedFileName;
 
+    // Original uploaded file
     @Column(nullable = false, length = 500)
     private String storagePath;
+
+    // FFmpeg processed file
+    @Column(length = 500)
+    private String processedFilePath;
 
     @Column(nullable = false, length = 100)
     private String contentType;

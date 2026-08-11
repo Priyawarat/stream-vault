@@ -95,10 +95,15 @@ public class VideoServiceImpl implements VideoService {
 
     @Override
     public ResponseEntity<StreamingResponseBody> stream(UUID videoId, String range) {
+
         Video video = videoRepository.findById(videoId).orElseThrow(() ->
                 new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
 
-        Resource resource = storageService.load(video.getStoragePath());
+        if (video.getStatus() != VideoStatus.READY) {
+            throw new IllegalStateException("Video is not ready for streaming");
+        }
+
+        Resource resource = storageService.load(video.getProcessedFilePath());
 
         try {
 
@@ -215,7 +220,7 @@ public class VideoServiceImpl implements VideoService {
     @Override
     public List<VideoListResponse> getAllVideos() {
 
-        List<VideoListResponse> videoListResponses = videoRepository.findByStatus(VideoStatus.UPLOADED)
+        List<VideoListResponse> videoListResponses = videoRepository.findByStatus(VideoStatus.READY)
                 .stream()
                 .map(video -> new VideoListResponse(
                         video.getId(),
