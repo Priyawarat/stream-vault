@@ -23,16 +23,24 @@ public class OutboxServiceImpl implements OutboxService {
     @Override
     public void saveVideoUploadedEvent(UUID videoId) {
 
-        VideoEvent event = new VideoEvent("VIDEO_UPLOADED", videoId);
+        OutboxEvent outboxEvent = OutboxEvent.builder()
+                .eventType("VIDEO_UPLOADED")
+                .aggregateId(videoId)
+                .status(OutboxStatus.PENDING)
+                .build();
+
+        // Persist first so the generated event ID is available
+        outboxEvent = outboxEventRepository.saveAndFlush(outboxEvent);
+
+        VideoEvent event = new VideoEvent(
+                outboxEvent.getId(),
+                outboxEvent.getEventType(),
+                videoId
+        );
 
         String payload = objectMapper.writeValueAsString(event);
 
-        OutboxEvent outboxEvent = OutboxEvent.builder()
-                .eventType(event.eventType())
-                .aggregateId(videoId)
-                .payload(payload)
-                .status(OutboxStatus.PENDING)
-                .build();
+        outboxEvent.setPayload(payload);
 
         outboxEventRepository.save(outboxEvent);
     }

@@ -88,6 +88,6 @@ public class KafkaConsumerConfig {
             return;
         }
 
-        videoStatusService.markFailed(videoEvent.videoId());
+        videoStatusService.markFailed(videoEvent.videoId(), videoEvent.eventId());
     }
 }

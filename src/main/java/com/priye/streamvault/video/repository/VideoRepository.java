@@ -16,18 +16,13 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     @Modifying
     @Query("""
-    UPDATE Video v
-    SET v.status = :processingStatus,
-        v.processingEventId = :eventId,
-        v.updatedAt = CURRENT_TIMESTAMP
-    WHERE v.id = :videoId
-      AND (
-            v.status = :uploadedStatus
-            OR ( v.status = :processingStatus
-                AND v.processingEventId = :eventId
-               )
-           )
-    """)
+            UPDATE Video v
+            SET v.status = :processingStatus,
+                v.processingEventId = :eventId,
+                v.updatedAt = CURRENT_TIMESTAMP
+            WHERE v.id = :videoId
+              AND v.status = :uploadedStatus
+            """)
     int claimProcessing(
             @Param("videoId") UUID videoId,
             @Param("eventId") UUID eventId,
@@ -35,4 +30,37 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
             @Param("processingStatus") VideoStatus processingStatus
     );
 
+    @Modifying
+    @Query("""
+            UPDATE Video v
+            SET v.status = :uploadedStatus,
+                v.processingEventId = NULL,
+                v.updatedAt = CURRENT_TIMESTAMP
+            WHERE v.id = :videoId
+              AND v.status = :processingStatus
+              AND v.processingEventId = :eventId
+            """)
+    int resetProcessingToUploaded(
+            @Param("videoId") UUID videoId,
+            @Param("eventId") UUID eventId,
+            @Param("processingStatus") VideoStatus processingStatus,
+            @Param("uploadedStatus") VideoStatus uploadedStatus
+    );
+
+    @Modifying
+    @Query("""
+            UPDATE Video v
+            SET v.status = :failedStatus,
+                v.processingEventId = NULL,
+                v.updatedAt = CURRENT_TIMESTAMP
+            WHERE v.id = :videoId
+              AND v.status = :processingStatus
+              AND v.processingEventId = :eventId
+            """)
+    int markFailed(
+            @Param("videoId") UUID videoId,
+            @Param("eventId") UUID eventId,
+            @Param("processingStatus") VideoStatus processingStatus,
+            @Param("failedStatus") VideoStatus failedStatus
+    );
 }
