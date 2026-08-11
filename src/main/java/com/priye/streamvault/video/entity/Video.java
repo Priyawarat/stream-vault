@@ -47,6 +47,9 @@ public class Video extends BaseEntity {
     @Column(nullable = false, length = 30)
     private VideoStatus status;
 
+    @Column(name = "processing_event_id")
+    private UUID processingEventId;
+
     @Column
     private Double duration;
 

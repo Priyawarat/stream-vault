@@ -16,10 +16,10 @@ public class VideoEventConsumer {
     @KafkaListener(topics = "video-uploaded", groupId = "streamvault-video-processor")
     public void consume(VideoEvent event) {
 
-        log.info("Received video event: eventType={}, videoId={}", event.eventType(), event.videoId());
+        log.info("Received video event: eventType={}, eventId={}, videoId={}", event.eventType(), event.eventId(), event.videoId());
 
         if ("VIDEO_UPLOADED".equals(event.eventType())) {
-            videoProcessingService.processVideo(event.videoId());
+            videoProcessingService.processVideo(event.videoId(), event.eventId());
         }
     }
 }

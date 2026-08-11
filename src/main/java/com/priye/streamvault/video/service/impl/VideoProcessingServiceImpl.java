@@ -26,25 +26,29 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
     private final VideoStatusService videoStatusService;
 
     @Override
-    public void processVideo(UUID videoId) {
+    public void processVideo(UUID videoId, UUID eventId) {
 
         log.info("Starting video processing. videoId={}", videoId);
 
         Video video = videoRepository.findById(videoId).orElseThrow(() ->
                         new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
 
-        if (video.getStatus() != VideoStatus.UPLOADED && video.getStatus() != VideoStatus.PROCESSING) {
-            log.warn("Skipping video processing. videoId={}, currentStatus={}", videoId, video.getStatus());
-            return;
+        boolean claimed = videoStatusService.claimProcessing(videoId, eventId);
+
+        if (!claimed) {
+            log.info("Skipping video processing. videoId={}, eventId={}, currentStatus={}, processingEventId={}",
+                    videoId,
+                    eventId,
+                    video.getStatus(),
+                    video.getProcessingEventId()
+            );
         }
 
-        // First attempt: UPLOADED → PROCESSING → COMMIT
-        if (video.getStatus() == VideoStatus.UPLOADED) {
-
-            videoStatusService.markProcessing(videoId);
-
-            log.info("Video status changed successfully. videoId={}, status={}", videoId, VideoStatus.PROCESSING);
-        }
+        log.info("Video processing claimed successfully. videoId={}, eventId={}, status={}",
+                videoId,
+                eventId,
+                video.getStatus()
+        );
 
         try {
 

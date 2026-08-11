@@ -11,4 +11,6 @@ public interface VideoStatusService {
     void markFailed(UUID videoId) ;
 
     void markReady(UUID videoId, FFprobeResult result, String processedFilePath);
+
+    boolean claimProcessing(UUID videoId, UUID eventId);
 }

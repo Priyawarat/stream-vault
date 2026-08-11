@@ -21,7 +21,7 @@ public class FFmpegServiceImpl implements FFmpegService {
 
         log.info("Starting FFmpeg processing. input={}, output={}", inputPath, outputPath);
 
-//        throw new RuntimeException("TEST: FFmpeg failure");
+//        throw new RuntimeException("TEST-3: Intentional FFmpeg failure for DLQ testing");
 
         try{
 

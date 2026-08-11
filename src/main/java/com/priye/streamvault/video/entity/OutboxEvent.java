@@ -41,6 +41,16 @@ public class OutboxEvent {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "processing_at")
+    private LocalDateTime processingAt;
+
+    @Column(name = "retry_count", nullable = false)
+    @Builder.Default
+    private int retryCount = 0;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    private String lastError;
+
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
