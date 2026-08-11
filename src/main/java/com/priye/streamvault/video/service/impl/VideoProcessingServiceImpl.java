@@ -42,7 +42,11 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
                     video.getStatus(),
                     video.getProcessingEventId()
             );
+            return;
         }
+
+        video = videoRepository.findById(videoId).orElseThrow(() ->
+                new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
 
         log.info("Video processing claimed successfully. videoId={}, eventId={}, status={}",
                 videoId,
@@ -82,7 +86,7 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
 
             // Do NOT mark FAILED here.
             // Kafka must receive the exception so that it can retry.
-
+            videoStatusService.resetProcessingToUploaded(videoId, eventId);
             throw e;
         }
 

@@ -6,11 +6,11 @@ import java.util.UUID;
 
 public interface VideoStatusService {
 
-    void markProcessing(UUID videoId);
-
-    void markFailed(UUID videoId) ;
+    void markFailed(UUID videoId, UUID eventId) ;
 
     void markReady(UUID videoId, FFprobeResult result, String processedFilePath);
 
     boolean claimProcessing(UUID videoId, UUID eventId);
+
+    void resetProcessingToUploaded(UUID videoId, UUID eventId);
 }

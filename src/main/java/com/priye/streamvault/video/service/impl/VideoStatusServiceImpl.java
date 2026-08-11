@@ -22,15 +22,6 @@ public class VideoStatusServiceImpl implements VideoStatusService {
 
     @Transactional
     @Override
-    public void markProcessing(UUID videoId) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() ->
-                new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
-        video.setStatus(VideoStatus.PROCESSING);
-        videoRepository.save(video);
-    }
-
-    @Transactional
-    @Override
     public void markReady(UUID videoId, FFprobeResult result, String processedFilePath) {
         Video video = videoRepository.findById(videoId).orElseThrow(() ->
                 new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
@@ -46,11 +37,24 @@ public class VideoStatusServiceImpl implements VideoStatusService {
 
     @Transactional
     @Override
-    public void markFailed(UUID videoId) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() ->
-                new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
-        video.setStatus(VideoStatus.FAILED);
-        videoRepository.save(video);
+    public void markFailed(UUID videoId, UUID eventId) {
+
+        int updatedRows = videoRepository.markFailed(
+                videoId,
+                eventId,
+                VideoStatus.PROCESSING,
+                VideoStatus.FAILED
+        );
+
+        if (updatedRows == 1) {
+
+            log.info("Video marked as FAILED. videoId={}, eventId={}", videoId, eventId);
+
+        } else {
+            log.warn("Video was not marked as FAILED because the processing claim did not match. " + "videoId={}, eventId={}",
+                    videoId,
+                    eventId);
+        }
     }
 
     @Transactional
@@ -66,4 +70,20 @@ public class VideoStatusServiceImpl implements VideoStatusService {
 
         return updatedRows == 1;
     }
+
+    @Transactional
+    @Override
+    public void resetProcessingToUploaded(UUID videoId, UUID eventId) {
+
+        int updatedRows = videoRepository.resetProcessingToUploaded(
+                videoId,
+                eventId,
+                VideoStatus.PROCESSING,
+                VideoStatus.UPLOADED
+        );
+
+        log.info("Reset processing video to uploaded. videoId={}, eventId={}, updatedRows={}", videoId, eventId, updatedRows);
+
+    }
+
 }
