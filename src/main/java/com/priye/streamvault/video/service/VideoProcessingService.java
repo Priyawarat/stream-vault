@@ -4,6 +4,6 @@ import java.util.UUID;
 
 public interface VideoProcessingService {
 
-    void processVideo(UUID videoId);
+    void processVideo(UUID videoId, UUID eventId);
 
 }

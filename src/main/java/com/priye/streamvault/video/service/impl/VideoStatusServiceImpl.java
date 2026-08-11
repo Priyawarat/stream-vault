@@ -53,4 +53,17 @@ public class VideoStatusServiceImpl implements VideoStatusService {
         videoRepository.save(video);
     }
 
+    @Transactional
+    @Override
+    public boolean claimProcessing(UUID videoId, UUID eventId) {
+
+        int updatedRows = videoRepository.claimProcessing(
+                videoId,
+                eventId,
+                VideoStatus.UPLOADED,
+                VideoStatus.PROCESSING
+        );
+
+        return updatedRows == 1;
+    }
 }
