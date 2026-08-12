@@ -1,3 +1,5 @@
+jwt.secretKey: kjkdlfjbjekhfakjsdfhopaihdsjfbfadljfhajdfhajdsbfladjfhuadf
+
 spring:
   application:
     name: streamvault
