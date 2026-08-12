@@ -22,17 +22,27 @@ public class VideoStatusServiceImpl implements VideoStatusService {
 
     @Transactional
     @Override
-    public void markReady(UUID videoId, FFprobeResult result, String processedFilePath) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() ->
-                new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
-        video.setStatus(VideoStatus.READY);
-        video.setDuration(result.duration());
-        video.setWidth(result.width());
-        video.setHeight(result.height());
-        video.setVideoCodec(result.videoCodec());
-        video.setAudioCodec(result.audioCodec());
-        video.setProcessedFilePath(processedFilePath);
-        videoRepository.save(video);
+    public void markReady(UUID videoId, UUID eventId, FFprobeResult result, String processedFilePath) {
+
+        int updatedRows = videoRepository.markReady(
+                videoId,
+                eventId,
+                VideoStatus.PROCESSING,
+                VideoStatus.READY,
+                result.duration(),
+                result.width(),
+                result.height(),
+                result.videoCodec(),
+                result.audioCodec(),
+                processedFilePath
+        );
+
+        if (updatedRows != 1) {
+            throw new IllegalStateException("Video processing claim no longer belongs to event. " + "videoId=" + videoId + ", eventId=" + eventId);
+        }
+
+        log.info("Video marked READY. videoId={}, eventId={}", videoId, eventId);
+
     }
 
     @Transactional
@@ -47,13 +57,9 @@ public class VideoStatusServiceImpl implements VideoStatusService {
         );
 
         if (updatedRows == 1) {
-
             log.info("Video marked as FAILED. videoId={}, eventId={}", videoId, eventId);
-
         } else {
-            log.warn("Video was not marked as FAILED because the processing claim did not match. " + "videoId={}, eventId={}",
-                    videoId,
-                    eventId);
+            log.warn("Video was not marked as FAILED because the processing claim did not match. videoId={}, eventId={}", videoId, eventId);
         }
     }
 
@@ -67,6 +73,8 @@ public class VideoStatusServiceImpl implements VideoStatusService {
                 VideoStatus.UPLOADED,
                 VideoStatus.PROCESSING
         );
+
+        log.info("Claim processing result. videoId={}, eventId={}, updatedRows={}", videoId, eventId, updatedRows);
 
         return updatedRows == 1;
     }
