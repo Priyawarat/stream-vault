@@ -1,7 +1,6 @@
 package com.priye.streamvault.user.service;
 
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import com.priye.streamvault.user.entity.User;
 
 import java.util.UUID;
 
