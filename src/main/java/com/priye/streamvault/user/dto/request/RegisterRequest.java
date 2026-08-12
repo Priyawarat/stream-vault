@@ -20,7 +20,6 @@ public class RegisterRequest {
     @Size(max = 150, message = "Email must be under 150 characters")
     private String email;
 
-    @NotBlank(message = "Mobile number is required")
     @Pattern(regexp = "^[6-9]\\d{9}$", message = "Mobile must be a valid 10-digit number")
     private String mobile;
 
