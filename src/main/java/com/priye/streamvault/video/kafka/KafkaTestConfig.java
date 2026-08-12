@@ -18,8 +18,11 @@ public class KafkaTestConfig {
         return args -> {
 
             UUID videoId = UUID.randomUUID();
+            UUID eventId = UUID.randomUUID();
+
 
             VideoEvent event = new VideoEvent(
+                    eventId,
                     "VIDEO_UPLOADED",
                     videoId
             );
