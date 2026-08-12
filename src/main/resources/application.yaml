@@ -1,11 +1,11 @@
+jwt.secretKey: kjkdlfjbjekhfakjsdfhopaihdsjfbfadljfhajdfhajdsbfladjfhuadf
+
 spring:
   application:
     name: streamvault
 
   datasource:
     url: jdbc:postgresql://localhost:5432/streamvault
-    username: postgres
-    password: priye223@
 
   jpa:
     hibernate:
