@@ -25,6 +25,9 @@ public class OutboxEvent {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "event_id", nullable = false, unique = true)
+    private UUID eventId;
+
     @Column(name = "event_type", nullable = false, length = 100)
     private String eventType;
 

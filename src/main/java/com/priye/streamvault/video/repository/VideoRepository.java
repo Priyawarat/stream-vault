@@ -16,13 +16,19 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     @Modifying
     @Query("""
-            UPDATE Video v
-            SET v.status = :processingStatus,
-                v.processingEventId = :eventId,
-                v.updatedAt = CURRENT_TIMESTAMP
-            WHERE v.id = :videoId
-              AND v.status = :uploadedStatus
-            """)
+    UPDATE Video v
+    SET v.status = :processingStatus,
+        v.processingEventId = :eventId,
+        v.updatedAt = CURRENT_TIMESTAMP
+    WHERE v.id = :videoId
+      AND (
+            v.status = :uploadedStatus
+            OR (
+                v.status = :processingStatus
+                AND v.processingEventId = :eventId
+            )
+          )
+    """)
     int claimProcessing(
             @Param("videoId") UUID videoId,
             @Param("eventId") UUID eventId,
@@ -32,14 +38,14 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     @Modifying
     @Query("""
-            UPDATE Video v
-            SET v.status = :uploadedStatus,
-                v.processingEventId = NULL,
-                v.updatedAt = CURRENT_TIMESTAMP
-            WHERE v.id = :videoId
-              AND v.status = :processingStatus
-              AND v.processingEventId = :eventId
-            """)
+    UPDATE Video v
+    SET v.status = :uploadedStatus,
+        v.processingEventId = NULL,
+        v.updatedAt = CURRENT_TIMESTAMP
+    WHERE v.id = :videoId
+      AND v.status = :processingStatus
+      AND v.processingEventId = :eventId
+    """)
     int resetProcessingToUploaded(
             @Param("videoId") UUID videoId,
             @Param("eventId") UUID eventId,
@@ -49,18 +55,47 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     @Modifying
     @Query("""
-            UPDATE Video v
-            SET v.status = :failedStatus,
-                v.processingEventId = NULL,
-                v.updatedAt = CURRENT_TIMESTAMP
-            WHERE v.id = :videoId
-              AND v.status = :processingStatus
-              AND v.processingEventId = :eventId
-            """)
+    UPDATE Video v
+    SET v.status = :failedStatus,
+        v.processingEventId = NULL,
+        v.updatedAt = CURRENT_TIMESTAMP
+    WHERE v.id = :videoId
+      AND v.status = :processingStatus
+      AND v.processingEventId = :eventId
+    """)
     int markFailed(
             @Param("videoId") UUID videoId,
             @Param("eventId") UUID eventId,
             @Param("processingStatus") VideoStatus processingStatus,
             @Param("failedStatus") VideoStatus failedStatus
+    );
+
+    @Modifying
+    @Query("""
+    UPDATE Video v
+    SET v.status = :readyStatus,
+        v.processingEventId = NULL,
+        v.duration = :duration,
+        v.width = :width,
+        v.height = :height,
+        v.videoCodec = :videoCodec,
+        v.audioCodec = :audioCodec,
+        v.processedFilePath = :processedFilePath,
+        v.updatedAt = CURRENT_TIMESTAMP
+    WHERE v.id = :videoId
+      AND v.status = :processingStatus
+      AND v.processingEventId = :eventId
+    """)
+    int markReady(
+            @Param("videoId") UUID videoId,
+            @Param("eventId") UUID eventId,
+            @Param("processingStatus") VideoStatus processingStatus,
+            @Param("readyStatus") VideoStatus readyStatus,
+            @Param("duration") Double duration,
+            @Param("width") Integer width,
+            @Param("height") Integer height,
+            @Param("videoCodec") String videoCodec,
+            @Param("audioCodec") String audioCodec,
+            @Param("processedFilePath") String processedFilePath
     );
 }

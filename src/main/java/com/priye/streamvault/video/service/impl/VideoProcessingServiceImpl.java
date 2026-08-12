@@ -28,7 +28,7 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
     @Override
     public void processVideo(UUID videoId, UUID eventId) {
 
-        log.info("Starting video processing. videoId={}", videoId);
+        log.info("Starting video processing. videoId={}, eventId={}", videoId, eventId);
 
         Video video = videoRepository.findById(videoId).orElseThrow(() ->
                         new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
@@ -76,7 +76,7 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
             ffmpegService.process(inputPath, outputPath);
 
             // Transaction 2: PROCESSING → READY → COMMIT
-            videoStatusService.markReady(videoId, result, outputPath);
+            videoStatusService.markReady(videoId, eventId, result, outputPath);
 
             log.info("Video processing completed successfully. videoId={}, status={}", videoId, VideoStatus.READY);
 
@@ -84,9 +84,21 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
 
             log.error("Video processing failed. videoId={}", videoId, e);
 
-            // Do NOT mark FAILED here.
-            // Kafka must receive the exception so that it can retry.
-            videoStatusService.resetProcessingToUploaded(videoId, eventId);
+            /*
+             * IMPORTANT:
+             *
+             * Do NOT reset PROCESSING → UPLOADED here.
+             *
+             * Kafka will retry the same event.
+             *
+             * The video remains:
+             *
+             * PROCESSING
+             * processingEventId = eventId
+             *
+             * If all Kafka retries fail, the DLQ recoverer
+             * will mark this exact processing attempt as FAILED.
+             */
             throw e;
         }
 

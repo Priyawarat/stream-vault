@@ -41,6 +41,8 @@ public class OutboxEventScheduler {
                 // Claim event: PENDING → PROCESSING
                 int updatedRows = outboxEventRepository.claimEvent(event.getId(), OutboxStatus.PENDING, OutboxStatus.PROCESSING, LocalDateTime.now());
 
+                log.info("Outbox event claimed. eventId={}, videoId={}, status=PROCESSING", event.getId(), event.getAggregateId());
+
                 if (updatedRows == 0) {
                     log.info("Skipping outbox event because it was already claimed. eventId={}", event.getId());
                     continue;
