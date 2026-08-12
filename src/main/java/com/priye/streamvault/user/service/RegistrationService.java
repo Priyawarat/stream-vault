@@ -9,5 +9,6 @@ public interface RegistrationService {
 
     RegisterResponse registerUser(RegisterRequest request);
     AuthResponse authenticate(AuthRequest request);
+    AuthResponse refreshToken(String refreshToken);
 
 }

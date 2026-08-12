@@ -1,5 +1,6 @@
 package com.priye.streamvault.user.service.impl;
 
+import com.priye.streamvault.common.exception.BadRequestException;
 import com.priye.streamvault.common.exception.DuplicateResourceException;
 import com.priye.streamvault.common.exception.ResourceNotFoundException;
 import com.priye.streamvault.user.dto.request.AuthRequest;
@@ -8,6 +9,7 @@ import com.priye.streamvault.user.dto.response.AuthResponse;
 import com.priye.streamvault.user.dto.response.RegisterResponse;
 import com.priye.streamvault.user.entity.User;
 import com.priye.streamvault.user.repository.UserRepository;
+import com.priye.streamvault.user.service.JwtService;
 import com.priye.streamvault.user.service.RegistrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -23,6 +27,7 @@ public class RegistrationServiceImpl implements RegistrationService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
 
     @Override
@@ -64,6 +69,31 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .findByEmail(request.getEmail())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found", request.getEmail()));
 
-        return null;
+        boolean isPasswordMatch = passwordEncoder.matches(request.getPassword(), user.getPassword());
+
+        if (!isPasswordMatch) {
+            throw new BadRequestException("Invalid credentials");
+        }
+
+        String accessToken = jwtService.generateToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
+    }
+
+    @Override
+    public AuthResponse refreshToken(String refreshToken) {
+     UUID userId = jwtService.getUserIdFromToken(refreshToken);
+     User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found", userId));
+
+     String token = jwtService.generateToken(user);
+     return AuthResponse.builder()
+                .accessToken(token)
+                .refreshToken(refreshToken)
+                .build();
     }
 }
