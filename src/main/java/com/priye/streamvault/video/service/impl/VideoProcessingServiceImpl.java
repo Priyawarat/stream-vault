@@ -1,9 +1,12 @@
 package com.priye.streamvault.video.service.impl;
 
+import com.priye.streamvault.common.enums.VideoProcessingJobStatus;
 import com.priye.streamvault.common.enums.VideoStatus;
 import com.priye.streamvault.common.exception.ResourceNotFoundException;
 import com.priye.streamvault.video.dto.response.FFprobeResult;
 import com.priye.streamvault.video.entity.Video;
+import com.priye.streamvault.video.entity.VideoProcessingJob;
+import com.priye.streamvault.video.repository.VideoProcessingJobRepository;
 import com.priye.streamvault.video.repository.VideoRepository;
 import com.priye.streamvault.video.service.FFmpegService;
 import com.priye.streamvault.video.service.FFprobeService;
@@ -13,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -24,6 +28,7 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
     private final FFprobeService ffprobeService;
     private final FFmpegService ffmpegService;
     private final VideoStatusService videoStatusService;
+    private final VideoProcessingJobRepository videoProcessingJobRepository;
 
     @Override
     public void processVideo(UUID videoId, UUID eventId) {
@@ -44,6 +49,15 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
             );
             return;
         }
+
+        VideoProcessingJob job = VideoProcessingJob.builder()
+                .videoId(videoId)
+                .eventId(eventId)
+                .status(VideoProcessingJobStatus.PROCESSING)
+                .startedAt(LocalDateTime.now())
+                .build();
+
+        job = videoProcessingJobRepository.save(job);
 
         video = videoRepository.findById(videoId).orElseThrow(() ->
                 new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
@@ -80,9 +94,14 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
 
             log.info("Video processing completed successfully. videoId={}, status={}", videoId, VideoStatus.READY);
 
+            job.setStatus(VideoProcessingJobStatus.COMPLETED);
+            job.setCompletedAt(LocalDateTime.now());
+
+            videoProcessingJobRepository.save(job);
+
         } catch (Exception e) {
 
-            log.error("Video processing failed. videoId={}", videoId, e);
+            log.error("Video processing failed. videoId={}, eventId={}", videoId, eventId, e);
 
             /*
              * IMPORTANT:
@@ -99,6 +118,12 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
              * If all Kafka retries fail, the DLQ recoverer
              * will mark this exact processing attempt as FAILED.
              */
+            job.setStatus(VideoProcessingJobStatus.FAILED);
+            job.setCompletedAt(LocalDateTime.now());
+            job.setErrorMessage(e.getMessage());
+
+            videoProcessingJobRepository.save(job);
+
             throw e;
         }
 
