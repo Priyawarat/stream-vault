@@ -35,15 +35,20 @@ public class RegistrationServiceImpl implements RegistrationService {
     public RegisterResponse registerUser(RegisterRequest request) {
 
         String normalizedEmail = request.getEmail().trim().toLowerCase();
+        String normalizedMobile = request.getMobile().trim();
 
-        if (userRepository.existsByEmail(normalizedEmail) || userRepository.existsByMobile(request.getMobile())) {
-            throw new DuplicateResourceException("User is already registered");
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new DuplicateResourceException("Email is already registered");
+        }
+
+        if (userRepository.existsByMobile(normalizedMobile)) {
+            throw new DuplicateResourceException("Mobile is already registered");
         }
 
         User user = User.builder()
                 .fullName(request.getFullName().trim())
                 .email(normalizedEmail)
-                .mobile(request.getMobile())
+                .mobile(normalizedMobile)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .active(true)
                 .build();
@@ -51,7 +56,6 @@ public class RegistrationServiceImpl implements RegistrationService {
         User savedUser = userRepository.save(user);
 
         log.info("New user registered: userId={}", savedUser.getId());
-
 
         return  RegisterResponse.builder()
                 .id(savedUser.getId())
@@ -65,9 +69,14 @@ public class RegistrationServiceImpl implements RegistrationService {
     @Override
     public AuthResponse authenticate(AuthRequest request) {
 
-        User user = userRepository
-                .findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found", request.getEmail()));
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new BadRequestException("Invalid credentials"));
+
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new BadRequestException("User account is inactive");
+        }
 
         boolean isPasswordMatch = passwordEncoder.matches(request.getPassword(), user.getPassword());
 
@@ -86,9 +95,13 @@ public class RegistrationServiceImpl implements RegistrationService {
 
     @Override
     public AuthResponse refreshToken(String refreshToken) {
-     UUID userId = jwtService.getUserIdFromToken(refreshToken);
+     UUID userId = jwtService.getUserIdFromRefreshToken(refreshToken);
      User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found", userId));
+
+     if (!Boolean.TRUE.equals(user.getActive())) {
+         throw new BadRequestException("User account is inactive");
+     }
 
      String token = jwtService.generateToken(user);
      return AuthResponse.builder()

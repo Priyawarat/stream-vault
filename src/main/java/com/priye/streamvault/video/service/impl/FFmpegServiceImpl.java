@@ -21,34 +21,34 @@ public class FFmpegServiceImpl implements FFmpegService {
 
         log.info("Starting FFmpeg processing. input={}, output={}", inputPath, outputPath);
 
-//        throw new RuntimeException("TEST-3: Intentional FFmpeg failure for DLQ testing");
+       throw new RuntimeException("TEST-3: Intentional FFmpeg failure for DLQ testing");
 
-        try{
-
-            Process process = getProcess(inputPath, outputPath);
-
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-
-                String line;
-
-                while ((line = reader.readLine()) != null) {
-                    log.debug("FFmpeg: {}", line);
-                }
-            }
-
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0) {
-                throw new RuntimeException("FFmpeg failed with exit code: " + exitCode);
-            }
-
-            log.info("FFmpeg processing completed successfully. output={}", outputPath);
-
-        } catch(Exception e){
-            log.error("FFmpeg processing failed. input={}, output={}", inputPath, outputPath, e);
-            throw new RuntimeException("Failed to process video using FFmpeg", e);
-        }
+//        try{
+//
+//            Process process = getProcess(inputPath, outputPath);
+//
+//            try (BufferedReader reader = new BufferedReader(
+//                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+//
+//                String line;
+//
+//                while ((line = reader.readLine()) != null) {
+//                    log.debug("FFmpeg: {}", line);
+//                }
+//            }
+//
+//            int exitCode = process.waitFor();
+//
+//            if (exitCode != 0) {
+//                throw new RuntimeException("FFmpeg failed with exit code: " + exitCode);
+//            }
+//
+//            log.info("FFmpeg processing completed successfully. output={}", outputPath);
+//
+//        } catch(Exception e){
+//            log.error("FFmpeg processing failed. input={}, output={}", inputPath, outputPath, e);
+//            throw new RuntimeException("Failed to process video using FFmpeg", e);
+//        }
     }
 
     /**
