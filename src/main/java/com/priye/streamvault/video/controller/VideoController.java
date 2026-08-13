@@ -1,5 +1,6 @@
 package com.priye.streamvault.video.controller;
 
+import com.priye.streamvault.user.entity.User;
 import com.priye.streamvault.video.dto.request.VideoUploadRequest;
 import com.priye.streamvault.video.dto.response.VideoListResponse;
 import com.priye.streamvault.video.dto.response.VideoStreamData;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -25,15 +27,12 @@ public class VideoController {
 
     private final VideoService videoService;
 
-    // TODO: replace with authenticated user context
-    private final UUID userId = UUID.fromString("455fd79d-bf31-42df-94b9-fdd9d9bbe38a");
-
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
-    public ResponseEntity<VideoUploadResponse> upload(@RequestParam("file") MultipartFile file) {
-
+    public ResponseEntity<VideoUploadResponse> upload(@RequestParam("file") MultipartFile file, @AuthenticationPrincipal User user) {
         VideoUploadRequest request = new VideoUploadRequest(file);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(videoService.upload(userId, request));
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(videoService.upload(user.getId(), request));
     }
 
     @GetMapping("/{videoId}/stream-full")
