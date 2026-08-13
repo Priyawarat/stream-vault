@@ -1,7 +1,6 @@
 package com.priye.streamvault.common.config;
 
 import com.priye.streamvault.user.service.JwtService;
-import com.priye.streamvault.user.service.RegistrationService;
 import com.priye.streamvault.user.service.UserService;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -15,7 +14,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -38,15 +36,15 @@ public class JWTAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try {
             String authHeader = request.getHeader("Authorization");
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ") || authHeader.length() <= 7) {
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            String jwtToken = authHeader.split("Bearer ")[1];
+            String jwtToken = authHeader.substring(7);
             UUID userId = jwtService.getUserIdFromToken(jwtToken);
 
-            if(userId !=null || SecurityContextHolder.getContext().getAuthentication() == null){
+            if (SecurityContextHolder.getContext().getAuthentication() == null)  {
                 UserDetails userDetails = userDetailsService.getUserById(userId);
                 UsernamePasswordAuthenticationToken authenticationToken =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
