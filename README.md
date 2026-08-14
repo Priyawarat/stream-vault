@@ -1,1704 +1,900 @@
-# Stream Valut
+# StreamVault 🎬
 
-# 🎬 Video Hosting Platform
+> **StreamVault is a video hosting and streaming platform built to demonstrate real-world backend engineering concepts such as asynchronous processing, Kafka, the Outbox Pattern, retries, DLQ handling, idempotency, concurrency protection, FFmpeg/FFprobe processing, JWT security, and HTTP Byte-Range streaming.**
 
-A production-oriented **video hosting and streaming platform** built with **Spring Boot**, **PostgreSQL**, **Redis**, **Kafka**, and **FFmpeg**.
+Built as a focused hackathon project with one goal: **show strong backend engineering through a complete working video-processing workflow.**
 
-The project demonstrates how a video platform can handle:
+---
 
-- Video uploads
-- Asynchronous video processing
-- Multiple video resolutions
+## 📑 Table of Contents
+
+- [Why StreamVault?](#-why-streamvault)
+- [Key Highlights](#-key-highlights)
+- [Technology Stack](#-technology-stack)
+- [System Architecture](#-system-architecture)
+- [End-to-End Flow](#-end-to-end-flow)
+- [Video Lifecycle](#-video-lifecycle)
+- [Outbox Pattern](#-outbox-pattern)
+- [Kafka, Retries & DLQ](#-kafka-retries--dlq)
+- [Idempotency & Concurrency Protection](#-idempotency--concurrency-protection)
+- [FFprobe & FFmpeg](#-ffprobe--ffmpeg)
+- [Video Variations & Streaming](#-video-variations--streaming)
+- [HTTP Byte-Range Streaming](#-http-byte-range-streaming)
+- [Authentication & Authorization](#-authentication--authorization)
+- [Database Design](#-database-design)
+- [Status Transition History](#-status-transition-history)
+- [API Overview](#-api-overview)
+- [Local Setup](#-local-setup)
+- [Production Evolution](#-production-evolution)
+- [Technical Summary](#-technical-summary)
+
+---
+
+## 💡 Why StreamVault?
+
+A basic video application can save a file and return a URL. StreamVault treats video processing as a **reliable asynchronous workflow**.
+
+The system is designed around a few important questions:
+
+- How do we make sure a database event is not lost before Kafka receives it?
+- What happens when Kafka or video processing fails?
+- What happens when the same event is delivered again?
+- What happens when two processing attempts race for the same video?
+- How can large video files be streamed efficiently?
+
+That engineering around the video upload is the core of StreamVault.
+
+---
+
+## ✨ Key Highlights
+
+### 🎥 Video Platform
+- User authentication and authorization
+- Video upload and ownership validation
+- Local filesystem storage
+- Video metadata management
 - Thumbnail generation
-- HTTP Range-based video streaming
-- Event-driven microservices
-- Reliable event publishing using the **Outbox Pattern**
-- Redis-based rate limiting
-- Redis distributed locking
-- Kafka retry and DLQ handling
-- Processing state management
-- Persistent processing logs
+- Video variations / adaptive streaming
+- HTTP Byte-Range streaming
+
+### ⚡ Event-Driven Processing
+- Apache Kafka for asynchronous processing
+- Outbox Pattern for reliable event publication
+- Scheduler-based outbox delivery
+- Event IDs for processing identity and correlation
+
+### 🛡️ Reliability
+- Database-backed processing claims
+- Duplicate event protection
+- Concurrent processing protection
+- Bounded Kafka retries
+- Dead Letter Queue handling
+- Outbox retry handling
+- Outbox crash recovery
+
+### 🎬 Media Processing
+- FFprobe metadata extraction
+- FFmpeg processing
+- Processed media generation
+- Persistent video status transitions
 
 ---
 
-## 🏗️ Architecture
+## 🧰 Technology Stack
 
-```text
-                         ┌─────────────────────┐
-                         │        React        │
-                         └──────────┬──────────┘
-                                    │
-                                    │ POST /api/v1/videos
-                                    ▼
-                         ┌─────────────────────┐
-                         │   Spring Boot API   │
-                         │   VideoController   │
-                         └──────────┬──────────┘
-                                    │
-                         ┌──────────▼──────────┐
-                         │   Redis Rate Limit  │
-                         │    100 req/min/user │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │  JWT Authentication │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │ Idempotency Check   │
-                         │ Avoid duplicate     │
-                         │ uploads on retry    │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │   Generate Video ID │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │   File Storage      │
-                         │ Disk / MinIO        │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │     PostgreSQL      │
-                         │ Save Video Metadata │
-                         │ Status = UPLOADED  │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │   Outbox Event      │
-                         │ VIDEO_UPLOADED      │
-                         │ Same DB Transaction │
-                         └──────────┬──────────┘
-                                    │
-                           Transaction Commit
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │ Outbox Scheduler    │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │       Kafka         │
-                         │   video-uploaded    │
-                         └──────────┬──────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │                               │
-                    ▼                               ▼
-          ┌──────────────────┐            ┌──────────────────┐
-          │ Processing       │            │ Notification     │
-          │ Service          │            │ Service          │
-          └────────┬─────────┘            └──────────────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ Redis Distributed│
-          │ Lock             │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ Download Video   │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ FFprobe          │
-          │ Read Metadata    │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ FFmpeg Processing│
-          └────────┬─────────┘
-                   │
-          ┌────────┼─────────┐
-          ▼        ▼         ▼
-       1080p     720p      480p
-          │        │         │
-          └────────┼─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ Generate         │
-          │ Thumbnail       │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ Upload Processed │
-          │ Files            │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ Update PostgreSQL│
-          │ Status = READY   │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ VIDEO_PROCESSED  │
-          │ Kafka Event      │
-          └────────┬─────────┘
-                   │
-                   ▼
-          ┌──────────────────┐
-          │ Notification     │
-          │ "Video is ready" │
-          └──────────────────┘
-```
+| Technology | Purpose |
+|---|---|
+| **Java** | Backend implementation |
+| **Spring Boot** | REST API and application framework |
+| **Spring Security + JWT** | Authentication and authorization |
+| **PostgreSQL** | Persistent application and workflow state |
+| **Apache Kafka** | Asynchronous video-processing events |
+| **FFprobe** | Video metadata extraction |
+| **FFmpeg** | Video processing |
+| **Spring Data JPA / Hibernate** | Database persistence |
+| **Maven** | Build and dependency management |
+| **Local Filesystem** | Video file storage |
 
 ---
 
-# 🚀 Core Video Upload Flow
+## 🏗️ System Architecture
 
-The upload process is intentionally asynchronous.
-
-```text
-User
- │
- │ POST /api/v1/videos
- ▼
-API
- │
- ├── Rate Limit
- ├── JWT Authentication
- ├── Idempotency Check
- ├── Generate Video ID
- ├── Store Original Video
- ├── Save Metadata
- └── Save Outbox Event
-          │
-          ▼
-     Transaction Commit
-          │
-          ▼
-     Outbox Scheduler
-          │
-          ▼
-        Kafka
-          │
-          ▼
- Processing Service
-          │
-          ├── FFprobe
-          ├── FFmpeg
-          ├── 1080p
-          ├── 720p
-          ├── 480p
-          └── Thumbnail
-          │
-          ▼
-      Status = READY
-```
-
-The API does **not** wait for FFmpeg processing to finish.
-
-Instead, it returns quickly after the upload and database transaction are completed.
-
-Example:
+### 👤 From Registration to Video Playback
 
 ```text
-POST /api/v1/videos
-
-Response:
-
-{
-    "videoId": "V101",
-    "status": "UPLOADED"
-}
+                         👤 User
+                           │
+                           ▼
+                  ┌─────────────────────┐
+                  │ 📝 Register         │
+                  │ Create account      │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 🔐 Login            │
+                  │ Receive JWT         │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 🎥 Upload Video     │
+                  │ Authenticated API   │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 💾 Local Storage    │
+                  │ Save original file  │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 🗄️ PostgreSQL       │
+                  │ Status = UPLOADED  │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 📦 Outbox Event     │
+                  │ VIDEO_UPLOADED      │
+                  └──────────┬──────────┘
+                             │
+                     ✅ Transaction Commit
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ ⏱️ Outbox Scheduler │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 📨 Kafka            │
+                  │ video-uploaded      │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ 🎬 Video Processing │
+                  │ UPLOADED → PROCESSING
+                  └──────────┬──────────┘
+                             │
+                 ┌───────────┼───────────┐
+                 │           │           │
+                 ▼           ▼           ▼
+         ┌────────────┐ ┌────────────┐ ┌─────────────┐
+         │ 🔎 FFprobe │ │ ⚙️ FFmpeg  │ │ 🖼️ Thumbnail│
+         │ Metadata   │ │ Variations │ │ Generation  │
+         └─────┬──────┘ └─────┬──────┘ └──────┬──────┘
+               │              │               │
+               └──────────────┼───────────────┘
+                              ▼
+                  ┌─────────────────────┐
+                  │ 🗄️ Update PostgreSQL│
+                  │ Metadata + Status   │
+                  └──────────┬──────────┘
+                             │
+                    ┌────────┴────────┐
+                    ▼                 ▼
+           ✅ READY / Playback   ❌ FAILED / DLQ
+                    │
+                    ▼
+           📺 Range Streaming
+                    │
+                    ▼
+                 🎬 Watch
 ```
 
-The user can then query the video later:
+The architecture follows one clear path: **authenticate → upload → persist → publish reliably → process asynchronously → prepare playback assets → stream the result**.
+
+### 🔄 Processing Path
 
 ```text
-GET /api/v1/videos/V101
+📨 Kafka: video-uploaded
+        │
+        ▼
+🎬 Video Processing
+        │
+        ├──────────────► 🔎 FFprobe
+        │                    │
+        │                    ▼
+        │              📊 Video Metadata
+        │
+        ├──────────────► ⚙️ FFmpeg
+        │                    │
+        │          ┌─────────┼─────────┐
+        │          ▼         ▼         ▼
+        │       🎞️ 1080p  🎞️ 720p  🎞️ 480p
+        │
+        └──────────────► 🖼️ Thumbnail
+                              │
+                              ▼
+                     🗄️ PostgreSQL
+                              │
+                     ┌────────┴────────┐
+                     ▼                 ▼
+                  ✅ READY          ❌ FAILED
 ```
 
-Once processing finishes:
+The important separation is simple:
 
-```text
-{
-    "videoId": "V101",
-    "status": "READY",
-    "duration": 930,
-    "thumbnailUrl": "/thumbnail/V101.jpg",
-    "availableQualities": [
-        "1080p",
-        "720p",
-        "480p"
-    ]
-}
-```
+**HTTP handles the request. PostgreSQL stores durable state. Outbox delivers the event. Kafka drives asynchronous processing. FFprobe/FFmpeg handle media work. The streaming API serves the processed media.**
 
 ---
 
-# ⏱️ Timeline of a Single Video
+## 🚀 End-to-End Flow
+
+### 🎬 Upload → Processing → Playback
 
 ```text
-t = 0 sec
-
-User uploads video
-        │
-        ▼
-API returns immediately
-Status = UPLOADED
-        │
-        ▼
-Kafka Event Published
-        │
-        ▼
-Processing Starts
-        │
-        ▼
-FFprobe Reads Metadata
-        │
-        ▼
-FFmpeg Creates:
- ├── 1080p
- ├── 720p
- ├── 480p
- └── Thumbnail
-        │
-        ▼
-Database Updated
-        │
-        ▼
-Status = READY
-        │
-        ▼
-User Can Watch Video
-```
-
----
-
-# 🔄 Outbox Pattern
-
-## The Problem
-
-Suppose the upload flow performs:
-
-```text
-Step 1 → Video saved             ✅
-Step 2 → Metadata saved          ✅
-Step 3 → Kafka publish            ❌
-```
-
-The database now contains:
-
-```text
-Status = UPLOADED
-```
-
-But the processing service never receives the event.
-
-The video could remain stuck forever.
-
----
-
-## The Solution
-
-The upload transaction saves both the metadata and the event:
-
-```text
-Save Video
-    │
-    ▼
-Save Metadata
-    │
-    ▼
-Save Outbox Event
-    │
-    ▼
-Transaction Commit
-```
-
-The outbox table contains:
-
-```text
-event_type = VIDEO_UPLOADED
-status     = PENDING
-```
-
-A scheduler periodically checks for pending events:
-
-```text
-Outbox Scheduler
-       │
-       ▼
-Find PENDING Events
-       │
-       ▼
-Publish to Kafka
-       │
-       ▼
-Mark Event = SENT
-```
-
-Therefore:
-
-```text
-Database Transaction
-        │
-        ├── Video Metadata
-        │
-        └── Outbox Event
-```
-
-are committed together.
-
-If Kafka is unavailable for one hour, the event remains in the outbox and can be published when Kafka becomes available again.
-
-### Goal
-
-> Never lose an important event simply because Kafka was temporarily unavailable.
-
----
-
-# 🔐 Redis Rate Limiting
-
-The upload endpoint is protected using Redis-based rate limiting.
-
-Example configuration:
-
-```text
-100 requests / minute / user
-```
-
-Flow:
-
-```text
-Client
+👤 User
   │
+  │  Upload video
   ▼
-Upload API
-  │
-  ▼
-Redis Rate Limiter
-  │
-  ├── Limit available → Continue
-  │
-  └── Limit exceeded → Reject
+┌─────────────────────────────┐
+│ 🔐 Authenticate request     │
+│ ✅ Validate video            │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ 💾 Store original video     │
+│    Local Filesystem          │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ 🗄️ Save video metadata      │
+│    Status = UPLOADED        │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ 📦 Save VIDEO_UPLOADED      │
+│    Outbox Event              │
+└──────────────┬──────────────┘
+               │
+               ▼
+        ✅ Transaction Commit
+               │
+               ▼
+┌─────────────────────────────┐
+│ ⏱️ Outbox Scheduler          │
+│    PENDING → PROCESSING     │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ 📨 Kafka                     │
+│    video-uploaded            │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ 🎬 Video Processing          │
+│    UPLOADED → PROCESSING    │
+└──────────────┬──────────────┘
+               │
+        ┌──────┴───────┐
+        ▼              ▼
+┌───────────────┐  ┌───────────────┐
+│ 🔎 FFprobe    │  │ ⚙️ FFmpeg     │
+│ Read metadata │  │ Process media │
+└───────┬───────┘  └───────┬───────┘
+        │                  │
+        └─────────┬────────┘
+                  ▼
+┌─────────────────────────────┐
+│ 🗄️ Persist processed data   │
+│    Status = READY           │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ 📺 Video can be streamed    │
+│    using HTTP Range         │
+└─────────────────────────────┘
 ```
 
-This protects the upload API from:
-
-- Accidental request loops
-- Upload abuse
-- Excessive API requests
-- Resource exhaustion
+The upload request does **not** wait for FFmpeg to finish. The API persists the upload and returns while the processing pipeline continues asynchronously.
 
 ---
 
-# 🔁 Idempotency
-
-Network failures can cause clients to retry the same request.
-
-Without idempotency:
+## 🧠 Video Lifecycle
 
 ```text
-Client
- │
- ├── Upload VIDEO
- │
- ├── Network timeout
- │
- └── Retry Upload
+┌──────────────┐
+│  📤 UPLOADED │
+└──────┬───────┘
+       │
+       │ Kafka event consumed
+       ▼
+┌──────────────┐
+│ ⚙️ PROCESSING│
+└──────┬───────┘
+       │
+       ├──────────────────────┐
+       │                      │
+       │ success              │ retries exhausted
+       ▼                      ▼
+┌──────────────┐       ┌──────────────┐
+│ ✅ READY     │       │ ❌ FAILED    │
+└──────────────┘       └──────────────┘
 ```
 
-The server could create two videos.
+Each important transition is also persisted in the status-transition history.
 
-With an idempotency key:
+---
+
+## 🔄 Outbox Pattern
+
+The core consistency problem is the gap between a successful database transaction and an independent Kafka publish.
+
+Without an Outbox:
 
 ```text
-Request
+🗄️ PostgreSQL
+     │
+     │ Save video ✅
+     ▼
+📨 Kafka publish ❌
+
+Result: video exists, but the processing event may be lost.
+```
+
+StreamVault instead writes the event into the same database transaction:
+
+```text
+┌───────────────────────────────────────┐
+│           🗄️ Database Transaction     │
+│                                       │
+│  1. Save Video                        │
+│  2. Save VIDEO_UPLOADED Outbox Event  │
+│                                       │
+│              ✅ COMMIT                 │
+└────────────────────┬──────────────────┘
+                     │
+                     ▼
+             ⏱️ Outbox Scheduler
+                     │
+                     ▼
+              📨 Publish Kafka
+                     │
+                     ▼
+          ✅ Mark Event PROCESSED
+```
+
+### 📦 Outbox lifecycle
+
+```text
+PENDING
    │
    ▼
-Idempotency Check
+PROCESSING
    │
-   ├── Already processed → Return existing result
+   ├──────────────► PROCESSED ✅
    │
-   └── New request       → Process upload
+   └──────────────► PENDING 🔁
+                      │
+                      │ retry limit reached
+                      ▼
+                   FAILED ❌
 ```
 
-This prevents duplicate operations when clients retry requests.
+The scheduler also detects stale `PROCESSING` events and returns them to `PENDING`, allowing recovery after an application crash.
 
 ---
 
-# 🔒 Distributed Lock with Redis
-
-As the platform grows, there may be multiple processing workers:
+## 📨 Kafka, Retries & DLQ
 
 ```text
-                 Kafka
-                   │
-       ┌───────────┼───────────┐
-       ▼           ▼           ▼
-   Worker 1     Worker 2     Worker 3
+              📨 Kafka
+                 │
+        ┌────────┴────────┐
+        │                 │
+        ▼                 ▼
+   🎬 Processing      🔁 Retry
+        │                 │
+        │ success         │ failure
+        ▼                 ▼
+     ✅ READY        🔁 Retry again
+                          │
+                          │ retry limit reached
+                          ▼
+                     💀 DLQ
+                          │
+                          ▼
+                     ❌ FAILED
 ```
 
-Imagine the same event is accidentally delivered more than once:
+The main topic is:
 
 ```text
-VIDEO123
-   │
-   ├──────────────► Worker 1
-   │
-   └──────────────► Worker 2
+video-uploaded
 ```
 
-Both workers might start:
+Failed messages are routed to:
 
 ```text
-FFmpeg
- ├── 1080p
- ├── 720p
- ├── 480p
- └── Thumbnail
+video-uploaded.DLQ
 ```
 
-This can result in duplicate processing and duplicate files.
+The consumer uses bounded retries with a fixed backoff. A poison message does not remain in an endless retry loop.
 
 ---
 
-## Redis Lock
+## 🛡️ Idempotency & Concurrency Protection
 
-Worker 1:
+### 🔁 Duplicate Event Protection
 
-```text
-Can I process VIDEO123?
-```
-
-Redis:
+The same Kafka event can be delivered again. StreamVault uses an atomic database claim instead of an in-memory flag.
 
 ```text
-YES → Lock created
+📨 Same VIDEO_UPLOADED event
+             │
+             ▼
+┌─────────────────────────────┐
+│ Attempt atomic video claim  │
+└──────────────┬──────────────┘
+               │
+        ┌──────┴──────┐
+        │             │
+     updated=1     updated=0
+        │             │
+        ▼             ▼
+   ✅ Process       ⏭️ Skip
+   FFprobe         duplicate
+   FFmpeg
 ```
 
-Worker 2:
+When the claim returns zero updated rows, the duplicate exits **before FFprobe and FFmpeg run**.
+
+### ⚔️ Concurrent Processing
+
+Two workers can race for the same video:
 
 ```text
-Can I process VIDEO123?
+                 🎬 Same Video
+                      │
+          ┌───────────┴───────────┐
+          ▼                       ▼
+      👷 Worker 1             👷 Worker 2
+          │                       │
+          └───────────┬───────────┘
+                      ▼
+             🔒 Atomic DB Claim
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+         ✅ Claim 1        ❌ Claim 0
+             │                 │
+             ▼                 ▼
+          PROCESSING          SKIP
 ```
 
-Redis:
-
-```text
-NO → Already being processed
-```
-
-Worker 2 exits.
-
-```text
-Worker 1 → PROCESSING
-Worker 2 → EXIT
-```
-
-The lock ensures that only one worker processes a particular video at a time.
+This makes the processing claim safe even when requests arrive concurrently.
 
 ---
 
-# 🎞️ Video Processing
+## 💥 Failure Recovery
 
-The Processing Service uses **FFprobe** to inspect the uploaded video.
+### 📦 Outbox crash recovery
 
-Typical metadata includes:
+```text
+📦 PENDING
+    │
+    ▼
+⚙️ PROCESSING
+    │
+    │ 💥 Application crashes
+    ▼
+⚙️ PROCESSING remains in DB
+    │
+    │ Application restarts
+    ▼
+🔎 Stale event detected
+    │
+    ▼
+📦 PENDING again
+    │
+    ▼
+📨 Kafka publish retried
+```
+
+### 🎬 Video processing failure
+
+```text
+⚙️ PROCESSING
+      │
+      ▼
+   FFprobe / FFmpeg
+      │
+      │ ❌ Failure
+      ▼
+   🔁 Kafka Retry
+      │
+      ├──────────────► Retry 1
+      │
+      ├──────────────► Retry 2
+      │
+      └──────────────► Retry exhausted
+                           │
+                           ▼
+                       💀 DLQ
+                           │
+                           ▼
+                      ❌ FAILED
+```
+
+The video-processing claim remains tied to the `eventId`, so only the correct processing attempt can finalize the video state.
+
+---
+
+## 🎞️ FFprobe & FFmpeg
+
+### 🔎 FFprobe
+
+FFprobe inspects the uploaded media and provides metadata used by the application, including:
 
 - Duration
-- Codec
 - Resolution
-- Bitrate
-- Container format
+- Video codec
+- Audio codec
 
-After metadata extraction, **FFmpeg** generates multiple variants.
+### ⚙️ FFmpeg
 
-```text
-Original Video
-      │
-      ▼
-    FFmpeg
-      │
-      ├──► 1080p
-      │
-      ├──► 720p
-      │
-      ├──► 480p
-      │
-      └──► Thumbnail
-```
-
-The processed files are stored using either:
+FFmpeg performs the actual media-processing stage and creates the processed media used by the streaming layer.
 
 ```text
-Local Disk
+🎥 Original Video
+       │
+       ▼
+   🔎 FFprobe
+       │
+       ├── Duration
+       ├── Resolution
+       ├── Video Codec
+       └── Audio Codec
+       │
+       ▼
+    ⚙️ FFmpeg
+       │
+       ▼
+🎬 Processed Media
+       │
+       ▼
+✅ READY
 ```
 
-or:
-
-```text
-MinIO
-```
+The external media-process failures are propagated back into the Kafka retry/DLQ workflow.
 
 ---
 
-# 🗄️ Database Schema
+## 🎬 Video Variations & Streaming
 
-The platform uses PostgreSQL.
-
-Main tables:
+Video processing produces playback-ready media representations used by the streaming side of the application.
 
 ```text
-1. video
-2. video_variant
-3. video_processing_job
-4. outbox_event
-5. processing_log
-6. user
-7. video_view        (optional)
+             🎥 Uploaded Video
+                    │
+                    ▼
+              ⚙️ Processing
+                    │
+            ┌───────┴────────┐
+            ▼                ▼
+        🎞️ Variant A      🎞️ Variant B
+            │                │
+            └───────┬────────┘
+                    ▼
+             📺 Video Player
 ```
+
+The important idea is that **processing and playback are separated**. The upload path does not need to understand the details of media delivery.
 
 ---
 
-## 1. `video`
+## 📺 HTTP Byte-Range Streaming
 
-Stores information about the original uploaded video.
-
-One uploaded video = one row.
+Large videos should not require the server to send the entire file for every request.
 
 ```text
-VIDEO
-────────────────────────────
-id                  UUID
-user_id             UUID
-title               VARCHAR
-description         TEXT
-original_filename   VARCHAR
-storage_path        VARCHAR
-status              VARCHAR
-duration            BIGINT
-thumbnail_url       VARCHAR
-default_resolution  VARCHAR
-file_size           BIGINT
-mime_type           VARCHAR
-created_at          TIMESTAMP
-updated_at          TIMESTAMP
+🎬 Browser / Video Player
+          │
+          │ Range: bytes=start-end
+          ▼
+┌──────────────────────────┐
+│ 📺 Streaming API         │
+│ Validate requested range │
+└─────────────┬────────────┘
+              │
+              ▼
+┌──────────────────────────┐
+│ 💾 Local Processed File  │
+│ Read requested bytes     │
+└─────────────┬────────────┘
+              │
+              ▼
+┌──────────────────────────┐
+│ ✅ 206 Partial Content   │
+│ Content-Range            │
+│ Content-Length           │
+└─────────────┬────────────┘
+              │
+              ▼
+       🎬 Video Player
 ```
 
-Example:
-
-```text
-id              = V101
-title           = Spring Boot Tutorial
-status          = READY
-duration        = 930 seconds
-thumbnail_url   = /thumbnail/V101.jpg
-storage_path    = videos/original/V101.mp4
-```
-
----
-
-## 2. `video_variant`
-
-A single video can have multiple generated files.
-
-```text
-Original
-   │
-   ├── 1080p
-   ├── 720p
-   └── 480p
-```
-
-Schema:
-
-```text
-VIDEO_VARIANT
-────────────────────────
-id
-video_id
-resolution
-storage_path
-size
-bitrate
-status
-created_at
-```
-
-Example:
-
-```text
-Video 101 | 1080p | /videos/1080/V101.mp4
-Video 101 | 720p  | /videos/720/V101.mp4
-Video 101 | 480p  | /videos/480/V101.mp4
-```
-
----
-
-## 3. `video_processing_job`
-
-Tracks processing attempts and history.
-
-```text
-VIDEO_PROCESSING_JOB
-────────────────────────
-id
-video_id
-status
-worker_name
-started_at
-completed_at
-error_message
-```
-
-Example:
-
-```text
-video_id     = V101
-status       = PROCESSING
-worker_name  = Worker-3
-```
-
-Later:
-
-```text
-status = COMPLETED
-```
-
-or:
-
-```text
-status = FAILED
-error_message = FFmpeg processing error
-```
-
----
-
-## 4. `outbox_event`
-
-Stores events that must eventually be published to Kafka.
-
-```text
-OUTBOX_EVENT
-────────────────────────
-id
-aggregate_type
-aggregate_id
-event_type
-payload
-status
-retry_count
-created_at
-published_at
-```
-
-Example:
-
-```text
-aggregate_type = VIDEO
-aggregate_id   = V101
-event_type     = VIDEO_UPLOADED
-status         = PENDING
-```
-
----
-
-## 5. `processing_log`
-
-Stores processing information persistently.
-
-```text
-PROCESSING_LOG
-────────────────────────
-id
-video_id
-step
-status
-message
-created_at
-```
-
-Example:
-
-```text
-video_id = V101
-step     = FFMPEG_720P
-status   = FAILED
-message  = FFmpeg exited with code 1
-```
-
-This makes it easier to diagnose processing failures without depending entirely on application logs.
-
----
-
-## 6. `user`
-
-Stores minimal user information.
-
-```text
-USER
-────────────────────────
-id
-name
-email
-mobile
-password
-created_at
-```
-
-Authentication is handled using JWT.
-
----
-
-## 7. `video_view` — Optional
-
-Can be added for analytics.
-
-```text
-VIDEO_VIEW
-────────────────────────
-id
-video_id
-user_id
-watch_duration
-viewed_at
-```
-
-Potential use cases:
-
-- View counts
-- Watch duration
-- Popular videos
-- User analytics
-- Most watched content
-
----
-
-# 🔗 Entity Relationships
-
-```text
-USER
- │
- │ 1
- │
- │ N
- ▼
-VIDEO
- │
- ├─────────────── 1:N ──────────────► VIDEO_VARIANT
- │
- ├─────────────── 1:N ──────────────► VIDEO_PROCESSING_JOB
- │
- ├─────────────── 1:N ──────────────► PROCESSING_LOG
- │
- ├─────────────── 1:N ──────────────► OUTBOX_EVENT
- │
- └─────────────── 1:N ──────────────► VIDEO_VIEW
-```
-
----
-
-# 📡 Kafka Events
-
-Main events:
-
-```text
-VIDEO_UPLOADED
-VIDEO_PROCESSED
-```
-
-### `VIDEO_UPLOADED`
-
-Produced after a video is successfully uploaded and the transaction commits.
-
-```text
-Video API
-    │
-    ▼
-Outbox
-    │
-    ▼
-Kafka
-    │
-    ▼
-Processing Service
-```
-
-### `VIDEO_PROCESSED`
-
-Published after processing is successfully completed.
-
-```text
-Processing Service
-        │
-        ▼
-     Kafka
-        │
-        ▼
-Notification Service
-```
-
-Notification:
-
-```text
-Your video is ready to watch.
-```
-
----
-
-# ❌ Failure Handling
-
-The processing pipeline supports retries and a Dead Letter Queue.
-
-```text
-Kafka Consumer
-      │
-      ▼
-Processing Failed?
-      │
-     YES
-      │
-      ▼
-Retry
-      │
-      ├── Attempt 1
-      ├── Attempt 2
-      └── Attempt 3
-      │
-      ▼
-Still Failed?
-      │
-     YES
-      │
-      ▼
-Dead Letter Queue
-      │
-      ▼
-Manual Retry API
-```
-
-This prevents permanently failing messages from blocking normal processing.
-
----
-
-# 📺 Video Streaming
-
-The platform supports HTTP Range-based video streaming.
-
-The browser sends requests such as:
+Example request:
 
 ```http
-GET /api/v1/videos/V101/stream
-
+GET /v1/videos/{videoId}/stream
 Range: bytes=0-999999
 ```
 
-The server reads only the requested portion of the file and responds with:
+Example response:
 
 ```http
 206 Partial Content
-```
-
-Example:
-
-```http
-Content-Range: bytes 0-999999/2680000
+Accept-Ranges: bytes
+Content-Range: bytes 0-999999/<total-size>
 Content-Length: 1000000
 Content-Type: video/mp4
 ```
 
----
-
-# 🧮 Understanding Byte Ranges
-
-A byte range is inclusive.
-
-```text
-Range: bytes=0-10
-```
-
-means:
-
-```text
-0 1 2 3 4 5 6 7 8 9 10
-```
-
-Total bytes:
-
-```text
-end - start + 1
-```
-
-Therefore:
-
-```text
-10 - 0 + 1 = 11 bytes
-```
-
-If exactly 10 bytes are required:
-
-```text
-Range: bytes=0-9
-```
-
-because:
-
-```text
-9 - 0 + 1 = 10 bytes
-```
-
----
-
-# 📦 Why the Last Byte Is `size - 1`
-
-Suppose a file contains exactly 100 bytes.
-
-Valid positions are:
-
-```text
-0 → 99
-```
-
-There is no byte `100`.
-
-Therefore:
-
-```text
-firstByte = 0
-lastByte  = totalSize - 1
-```
-
-The same concept applies to a Java byte array:
-
-```java
-byte[] data = new byte[100];
-
-data[0]   // first byte
-data[99]  // last byte
-```
-
-There is no:
-
-```java
-data[100]
-```
-
----
-
-# 🌐 Browser Range Requests
-
-Suppose a video is:
-
-```text
-2,680,000 bytes
-```
-
-The browser might request:
-
-### First request
+For an invalid range:
 
 ```http
-Range: bytes=0-999999
+416 Requested Range Not Satisfiable
+Content-Range: bytes */<total-size>
 ```
 
-```text
-999999 - 0 + 1
-= 1,000,000 bytes
-```
-
-### Second request
-
-```http
-Range: bytes=1000000-1999999
-```
-
-```text
-1999999 - 1000000 + 1
-= 1,000,000 bytes
-```
-
-### Third request
-
-```http
-Range: bytes=2000000-2679999
-```
-
-```text
-2679999 - 2000000 + 1
-= 680,000 bytes
-```
-
-However, **1 MB is not a guaranteed browser chunk size**.
-
-Different:
-
-- Browsers
-- Video players
-- Network conditions
-- Implementations
-
-can request different ranges.
-
-The server's responsibility is simply to correctly understand:
-
-```text
-Range: bytes=start-end
-```
-
-and return the requested bytes.
+The player decides which byte range it needs; the server's responsibility is to validate and return the requested bytes correctly.
 
 ---
 
-# ⚠️ Range Beyond File Size
-
-Suppose:
+## 🔐 Authentication & Authorization
 
 ```text
-File size = 2,680,000 bytes
+👤 User
+  │
+  ▼
+🔑 Login
+  │
+  ▼
+🎫 JWT issued
+  │
+  ▼
+📨 Authenticated request
+  │
+  ▼
+🛡️ Authorization / ownership check
+  │
+  ▼
+✅ Protected video operation
 ```
 
-Valid byte positions:
+JWT-based security protects authenticated resources, while ownership validation ensures users can only perform permitted operations on their videos.
+
+---
+
+## 🗄️ Database Design
+
+PostgreSQL acts as the durable source of truth for application and workflow state.
+
+### Core tables
+
+| Table | Purpose |
+|---|---|
+| `users` | User identity and authentication data |
+| `videos` | Video metadata and current processing state |
+| `outbox_events` | Reliable Kafka event delivery |
+| `video_status_transitions` | Persistent status history |
+| `video_processing_jobs` | Processing-attempt tracking |
+| `video_variants` | Playback-ready video representations |
+
+### Relationship overview
 
 ```text
-0 → 2,679,999
+👤 USER
+   │
+   │ 1 : N
+   ▼
+🎥 VIDEO
+   │
+   ├──────────────► 📦 OUTBOX_EVENT
+   │
+   ├──────────────► 🔄 STATUS_TRANSITION
+   │
+   ├──────────────► ⚙️ PROCESSING_JOB
+   │
+   └──────────────► 🎞️ VIDEO_VARIANT
 ```
 
-If the browser requests:
-
-```http
-Range: bytes=3000000-3999999
-```
-
-the requested range does not exist.
-
-The server should return:
-
-```http
-416 Range Not Satisfiable
-```
+The database stores **metadata and workflow state**; the actual video files are stored separately on the local filesystem.
 
 ---
 
-# ⚠️ Range Partially Beyond File Size
+## 🧾 Status Transition History
 
-Suppose the browser requests:
-
-```http
-Range: bytes=2500000-3000000
-```
-
-The requested end is beyond the file.
-
-However, these bytes exist:
+The application keeps both the current status and its history.
 
 ```text
-2,500,000 → 2,679,999
+🎥 VIDEO
+   │
+   │ current state
+   ▼
+✅ READY
+
+        +
+
+📜 STATUS HISTORY
+   │
+   ├── 📤 UPLOADED → ⚙️ PROCESSING
+   │
+   └── ⚙️ PROCESSING → ✅ READY
 ```
 
-The server can return:
-
-```http
-206 Partial Content
-
-Content-Range: bytes 2500000-2679999/2680000
-```
-
-The server returns the remaining available bytes.
-
----
-
-# 🎯 How Does the Browser Know What to Request?
-
-A video is **not** simply:
+A failed workflow is represented as:
 
 ```text
-1 second = X bytes
-```
-
-Compression varies based on the video content.
-
-For example:
-
-```text
-0:00 → 5 MB
-0:10 → 8 MB
-0:20 → 12 MB
-```
-
-The browser/video player uses information such as:
-
-- Duration
-- Timestamps
-- Codec
-- Bitrate
-- Keyframes
-- Container metadata
-
-to determine what data it needs.
-
-Therefore, the server does **not** calculate:
-
-```text
-5 seconds = 2 MB
-10 seconds = 4 MB
-```
-
-Instead, the browser requests a byte range.
-
----
-
-# 🎥 Streaming Request Flow
-
-```text
-                    BROWSER
-                       │
-                       │ GET /stream
-                       │ Range: bytes=0-999999
-                       ▼
-                ┌──────────────┐
-                │ StreamVault  │
-                │ Spring Boot  │
-                └──────┬───────┘
-                       │
-                       │ Check video
-                       ▼
-                  PostgreSQL
-                       │
-                       │ storagePath
-                       ▼
-                 Local MP4 File
-                       │
-                       │ Read bytes
-                       ▼
-                  0 → 999999
-                       │
-                       ▼
-                HTTP 206
-                       │
-                       │ Content-Range:
-                       │ bytes 0-999999/2680000
-                       ▼
-                    BROWSER
-                       │
-                       ▼
-                      🎬
-```
-
-### Server Responsibility
-
-The Spring Boot server must:
-
-1. Validate the requested range.
-2. Determine the correct file.
-3. Read the requested bytes.
-4. Return `206 Partial Content`.
-5. Set the correct `Content-Range`.
-6. Set the correct `Content-Length`.
-7. Return the appropriate `Content-Type`.
-
-The browser/video player handles the playback and seeking logic.
-
----
-
-# 🔌 REST APIs
-
-## Authentication
-
-### Register
-
-```http
-POST /api/v1/auth/register
-```
-
-Creates a new user.
-
-### Login
-
-```http
-POST /api/v1/auth/login
-```
-
-Authenticates the user and returns a JWT.
-
----
-
-## Videos
-
-### Upload Video
-
-```http
-POST /api/v1/videos
-```
-
-Responsibilities:
-
-- Validate request
-- Authenticate user
-- Apply rate limiting
-- Check idempotency
-- Store original file
-- Save metadata
-- Create outbox event
-
----
-
-### Get Video Details
-
-```http
-GET /api/v1/videos/{videoId}
-```
-
-Returns:
-
-- Title
-- Description
-- Duration
-- Processing status
-- Thumbnail
-- Available qualities
-- Video metadata
-
----
-
-### List My Videos
-
-```http
-GET /api/v1/videos/my
-```
-
-Returns videos uploaded by the authenticated user.
-
----
-
-### Stream Video
-
-```http
-GET /api/v1/videos/{videoId}/stream
-```
-
-Streams the default video variant using HTTP Range requests.
-
----
-
-### Stream by Resolution
-
-```http
-GET /api/v1/videos/{videoId}/stream?quality=720
-```
-
-Streams a specific video variant.
-
-Example:
-
-```text
-quality=1080
-quality=720
-quality=480
-```
-
----
-
-### Delete Video
-
-```http
-DELETE /api/v1/videos/{videoId}
-```
-
-Deletes the uploaded video and associated resources.
-
----
-
-# 🧩 Technology & Architecture Concepts
-
-This project focuses on production-oriented backend concepts.
-
-| Concept | Status |
-|---|:---:|
-| Spring Boot | ✅ |
-| Microservice Communication | ✅ |
-| Kafka | ✅ |
-| Event-Driven Architecture | ✅ |
-| Async Processing | ✅ |
-| Outbox Pattern | ✅ |
-| FFmpeg Processing | ✅ |
-| FFprobe | ✅ |
-| Video State Machine | ✅ |
-| Redis Rate Limiting | ✅ |
-| Redis Distributed Lock | ✅ |
-| Retry Handling | ✅ |
-| Dead Letter Queue | ✅ |
-| Scheduler | ✅ |
-| File Storage | ✅ |
-| PostgreSQL | ✅ |
-| JWT Authentication | ✅ |
-| Request Validation | ✅ |
-| Global Exception Handler | ✅ |
-| DTO + Mapper | ✅ |
-| HTTP Range Streaming | ✅ |
-| Multiple Video Resolutions | ✅ |
-| Thumbnail Generation | ✅ |
-
----
-
-# 🧠 Video State Machine
-
-A video's lifecycle can be represented as:
-
-```text
-              ┌─────────────┐
-              │   UPLOADED  │
-              └──────┬──────┘
-                     │
-                     ▼
-              ┌─────────────┐
-              │  PROCESSING │
-              └──────┬──────┘
-                     │
-             ┌───────┴────────┐
-             │                │
-             ▼                ▼
-       ┌──────────┐      ┌──────────┐
-       │  READY   │      │  FAILED  │
-       └──────────┘      └────┬─────┘
-                              │
-                              │ Retry
-                              ▼
-                         PROCESSING
-```
-
-This gives the application a clear and predictable processing lifecycle.
-
----
-
-# 🏃 End-to-End Processing Flow
-
-```text
-                    USER
-                     │
-                     ▼
-               Upload Video
-                     │
-                     ▼
-              Spring Boot API
-                     │
-          ┌──────────┼──────────┐
-          │          │          │
-          ▼          ▼          ▼
-       JWT Auth   Rate Limit  Idempotency
-          │          │          │
-          └──────────┼──────────┘
-                     │
-                     ▼
-                Store File
-                     │
-                     ▼
-              Save PostgreSQL
-                     │
-                     ▼
-               Outbox Event
-                     │
-                     ▼
-               Kafka Publisher
-                     │
-                     ▼
-              video-uploaded
-                     │
-                     ▼
-           Processing Service
-                     │
-                     ▼
-               Redis Lock
-                     │
-                     ▼
-                  FFprobe
-                     │
-                     ▼
-                  FFmpeg
-                     │
-          ┌──────────┼──────────┐
-          ▼          ▼          ▼
-        1080p      720p       480p
-          │          │          │
-          └──────────┼──────────┘
-                     │
-                     ▼
-                Thumbnail
-                     │
-                     ▼
-              Store Files
-                     │
-                     ▼
-              Update Database
-                     │
-                     ▼
-              Status = READY
-                     │
-                     ▼
-             VIDEO_PROCESSED
-                     │
-                     ▼
-          Notification Service
-                     │
-                     ▼
-              User Watches
-                     │
-                     ▼
-              HTTP Streaming
-```
-
----
-
-# 🛡️ Reliability Design
-
-The platform handles several failure scenarios.
-
-### Kafka Unavailable
-
-```text
-DB Transaction
+📤 UPLOADED
       │
       ▼
-Outbox Event = PENDING
+⚙️ PROCESSING
       │
       ▼
-Kafka unavailable
-      │
-      ▼
-Retry later
+❌ FAILED
 ```
 
-The event is not lost.
-
-### Duplicate Kafka Event
-
-```text
-Event
- │
- ├── Worker 1 → Redis Lock → PROCESS
- │
- └── Worker 2 → Redis Lock → EXIT
-```
-
-### Processing Failure
-
-```text
-Processing
-    │
-    ▼
-Failure
-    │
-    ▼
-Retry × 3
-    │
-    ▼
-DLQ
-    │
-    ▼
-Manual Retry
-```
-
-### Client Upload Retry
-
-```text
-Same Idempotency Key
-        │
-        ▼
-Idempotency Check
-        │
-        ▼
-Existing Result
-```
-
-This prevents duplicate uploads.
+This makes the processing lifecycle easy to audit without relying only on runtime logs.
 
 ---
 
-# 📂 Suggested Service Architecture
+## 🔌 API Overview
 
-A possible microservice structure:
+The core video surface is intentionally small:
 
-```text
-video-platform/
-│
-├── api-gateway/
-│
-├── auth-service/
-│
-├── video-service/
-│
-├── processing-service/
-│
-├── notification-service/
-│
-├── docker-compose.yml
-│
-└── README.md
-```
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/v1/videos/upload` | Upload a video |
+| `GET` | `/v1/videos` | Retrieve available videos |
+| `GET` | `/v1/videos/{videoId}/stream-full` | Stream the stored resource |
+| `GET` | `/v1/videos/{videoId}/stream` | Stream using HTTP Range requests |
 
-### API / Video Service
+Authentication endpoints are also available for registration and login.
 
-Responsible for:
+---
 
-- Authentication integration
-- Video upload
-- Metadata
-- File storage
-- Video APIs
-- Streaming
-- Outbox creation
+## ▶️ Local Setup
 
-### Processing Service
+### Prerequisites
 
-Responsible for:
-
-- Kafka consumption
-- Distributed locking
-- FFprobe
+- Java
+- Maven
+- PostgreSQL
+- Apache Kafka
 - FFmpeg
-- Variant generation
-- Thumbnail generation
-- Processing status
-- Retry handling
+- FFprobe
 
-### Notification Service
+### Verify media tools
 
-Responsible for:
-
-- Consuming `VIDEO_PROCESSED`
-- Sending video-ready notifications
-
----
-
-# 🧪 Local Video Testing
-
-A simple test page can be used to directly test browser streaming:
-
-```text
-http://localhost:8080/test-video.html
+```bash
+ffmpeg -version
+ffprobe -version
 ```
 
-The browser can then issue HTTP Range requests against the streaming endpoint.
+### Start the application
 
----
-
-# 📌 Key Design Principles
-
-### 1. Upload should be fast
-
-The API should not wait for FFmpeg.
-
-```text
-Upload → Store → Event → Return
+```bash
+mvn clean install
+mvn spring-boot:run
 ```
 
-Processing happens asynchronously.
-
-### 2. Events must not be lost
-
-The Outbox Pattern guarantees that the event is persisted alongside the database state.
-
-### 3. Processing must be safe
-
-Redis distributed locking prevents multiple workers from processing the same video simultaneously.
-
-### 4. Failures must be recoverable
-
-Kafka retries and DLQ handling prevent permanently failed processing from disappearing silently.
-
-### 5. Streaming should be efficient
-
-HTTP Range requests allow the browser to retrieve only the required portion of the video instead of downloading the entire file.
+Start PostgreSQL and Kafka locally before launching the application, and ensure the media tools are available on the system path.
 
 ---
 
-# 🎯 Project Goals
-
-This project is designed to demonstrate how a real-world video hosting platform can be built using modern backend architecture.
-
-The primary goals are:
-
-- Build a reliable video upload pipeline.
-- Process videos asynchronously.
-- Generate multiple resolutions.
-- Store video metadata separately from physical files.
-- Implement event-driven communication.
-- Prevent lost events.
-- Prevent duplicate processing.
-- Handle transient failures.
-- Support browser-based streaming.
-- Demonstrate production-oriented backend patterns.
-
----
-
-# 🏁 Final Architecture Summary
+## 🚀 Quick Demo Flow
 
 ```text
-                       ┌──────────────┐
-                       │    Client    │
-                       │ React/Postman│
-                       └───────┬──────┘
-                               │
-                               ▼
-                       ┌──────────────┐
-                       │ API Gateway  │
-                       │ /JWT         │
-                       └───────┬──────┘
-                               │
-                               ▼
-                    ┌────────────────────┐
-                    │   Video Service    │
-                    │                    │
-                    │                    │
-                    │ Rate Limiting      │
-                    │ Idempotency        │
-                    │ Upload             │
-                    │ Streaming          │
-                    └─────────┬──────────┘
-                              │
-                ┌─────────────┼─────────────┐
-                ▼             ▼             ▼
-          PostgreSQL        Redis        File Storage
-                │
-                ▼
-          Outbox Event
-                │
-                ▼
-             Kafka
-                │
-                ▼
-       ┌──────────────────┐
-       │ Processing       │
-       │ Service          │
-       │                  │
-       │ Redis Lock       │
-       │ FFprobe          │
-       │ FFmpeg           │
-       │ Thumbnail        │
-       └────────┬─────────┘
-                │
-                ▼
-          Video Variants
-                │
-                ▼
-          Status = READY
-                │
-                ▼
-             Kafka
-                │
-                ▼
-       Notification Service
+👤 Register / Login
+        │
+        ▼
+🔐 Receive JWT
+        │
+        ▼
+🎥 Upload Video
+        │
+        ▼
+📦 Outbox Event
+        │
+        ▼
+📨 Kafka
+        │
+        ▼
+⚙️ FFprobe + FFmpeg
+        │
+        ▼
+✅ Video READY
+        │
+        ▼
+📺 Stream Video
 ```
 
-## 💡 What This Project Demonstrates
+This is the shortest path through the application and demonstrates the main architecture from API request to playback.
 
-> **A reliable, asynchronous, event-driven video processing and streaming architecture using Spring Boot, Kafka, Redis, PostgreSQL, and FFmpeg.**
+---
 
-The project combines practical backend engineering concepts such as **microservices, distributed systems, event-driven architecture, reliable messaging, concurrency control, asynchronous processing, failure recovery, and HTTP video streaming** into a single end-to-end system.
+## 🏁 Production Evolution
+
+The current architecture provides a clear path toward larger deployments:
+
+```text
+💻 Local Filesystem
+        ↓
+☁️ Object Storage
+
+🏠 Single Processing Flow
+        ↓
+👷 Multiple Processing Workers
+
+🖥️ Local Application
+        ↓
+📊 Centralized Monitoring & Observability
+
+🌐 Direct File Delivery
+        ↓
+🚀 CDN-backed Streaming
+```
+
+The important foundation is already in place: **durable state, asynchronous processing, reliable event delivery, safe processing claims, and independent media delivery.**
+
+---
+
+## 🧠 Engineering Principles
+
+### ⚡ Keep expensive work asynchronous
+
+Upload should not wait for FFmpeg.
+
+```text
+Upload → Persist → Return
+              │
+              ▼
+        Async Processing
+```
+
+### 📦 Make events durable
+
+The Outbox Pattern keeps database state and the processing event durable together.
+
+### 🛡️ Expect duplicates
+
+Processing is protected by a database-backed claim rather than assuming an event will arrive exactly once.
+
+### 🔁 Bound retries
+
+Transient failures should be retried, but permanently failing messages should move to a DLQ instead of retrying forever.
+
+### 📺 Stream large files efficiently
+
+HTTP Range requests allow the client to request only the bytes it needs.
+
+---
+
+## 🎯 Technical Summary
+
+StreamVault demonstrates a complete backend workflow around a deceptively simple feature: **upload and stream a video reliably**.
+
+- **Event-driven architecture** separates upload from CPU-intensive processing.
+- **Outbox Pattern** provides reliable database-to-Kafka event delivery.
+- **Kafka retries and DLQ** provide bounded failure handling.
+- **Event IDs and atomic database claims** provide idempotent processing and concurrency protection.
+- **FFprobe and FFmpeg** provide real media analysis and processing rather than placeholder workflows.
+- **Status transitions** make the video-processing lifecycle explicit and auditable.
+- **Crash recovery** allows stale outbox work to be reclaimed after application restart.
+- **JWT authentication and ownership checks** secure the video APIs.
+- **HTTP Byte-Range streaming** provides efficient delivery of large processed video files.
+- **PostgreSQL remains the source of truth** for video metadata and workflow state.
+
+> **StreamVault is a practical demonstration of how a video upload can become a reliable asynchronous distributed workflow instead of a simple file-save operation.**
