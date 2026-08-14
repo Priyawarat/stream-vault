@@ -217,6 +217,7 @@ public class VideoServiceImpl implements VideoService {
                         video.getContentType(),
                         video.getStatus(),
                         "/v1/videos/" + video.getId() + "/thumbnail",
+                        "/v1/videos/" + video.getId() + "/stream",
                         video.getCreatedAt()
                 ))
                 .toList();
