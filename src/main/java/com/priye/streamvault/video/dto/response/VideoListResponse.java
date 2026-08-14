@@ -12,6 +12,7 @@ public record VideoListResponse(
         String contentType,
         VideoStatus status,
         String thumbnailUrl,
+        String streamUrl,
         LocalDateTime createdAt
 ) {
 }
