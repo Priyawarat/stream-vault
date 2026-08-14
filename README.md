@@ -131,7 +131,7 @@ That engineering around the video upload is the core of StreamVault.
                              ▼
                   ┌─────────────────────┐
                   │ 🗄️ PostgreSQL       │
-                  │ Status = UPLOADED  │
+                  │ Status = UPLOADED   │
                   └──────────┬──────────┘
                              │
                              ▼
@@ -163,7 +163,7 @@ That engineering around the video upload is the core of StreamVault.
                  │           │           │
                  ▼           ▼           ▼
          ┌────────────┐ ┌────────────┐ ┌─────────────┐
-         │ 🔎 FFprobe │ │ ⚙️ FFmpeg  │ │ 🖼️ Thumbnail│
+         │ 🔎 FFprobe │ │ ⚙️ FFmpeg │ │ 🖼️ Thumbnail│
          │ Metadata   │ │ Variations │ │ Generation  │
          └─────┬──────┘ └─────┬──────┘ └──────┬──────┘
                │              │               │
