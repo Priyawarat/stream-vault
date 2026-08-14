@@ -8,10 +8,7 @@ import com.priye.streamvault.video.entity.Video;
 import com.priye.streamvault.video.entity.VideoProcessingJob;
 import com.priye.streamvault.video.repository.VideoProcessingJobRepository;
 import com.priye.streamvault.video.repository.VideoRepository;
-import com.priye.streamvault.video.service.FFmpegService;
-import com.priye.streamvault.video.service.FFprobeService;
-import com.priye.streamvault.video.service.VideoProcessingService;
-import com.priye.streamvault.video.service.VideoStatusService;
+import com.priye.streamvault.video.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +26,8 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
     private final FFmpegService ffmpegService;
     private final VideoStatusService videoStatusService;
     private final VideoProcessingJobRepository videoProcessingJobRepository;
+    private final ThumbnailService thumbnailService;
+    private final VideoVariantService videoVariantService;
 
     @Override
     public void processVideo(UUID videoId, UUID eventId) {
@@ -89,8 +88,18 @@ public class VideoProcessingServiceImpl implements VideoProcessingService {
             log.info("Starting FFmpeg. videoId={}, input={}, output={}", videoId, inputPath, outputPath);
             ffmpegService.process(inputPath, outputPath);
 
+            // Video Variants
+            videoVariantService.generateVariants(videoId, outputPath, result);
+
+            // Thumbnail
+            String thumbnailPath = inputPath.substring(0, inputPath.lastIndexOf('.')) + "_thumbnail.jpg";
+
+            log.info("Starting thumbnail generation. videoId={}, input={}, thumbnail={}", videoId, outputPath, thumbnailPath);
+
+            thumbnailService.generate(outputPath, thumbnailPath);
+
             // Transaction 2: PROCESSING → READY → COMMIT
-            videoStatusService.markReady(videoId, eventId, result, outputPath);
+            videoStatusService.markReady(videoId, eventId, result, outputPath, thumbnailPath);
 
             log.info("Video processing completed successfully. videoId={}, status={}", videoId, VideoStatus.READY);
 

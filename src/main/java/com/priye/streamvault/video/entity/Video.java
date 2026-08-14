@@ -37,6 +37,10 @@ public class Video extends BaseEntity {
     @Column(length = 500)
     private String processedFilePath;
 
+    // Generated thumbnail
+    @Column(length = 500)
+    private String thumbnailPath;
+
     @Column(nullable = false, length = 100)
     private String contentType;
 

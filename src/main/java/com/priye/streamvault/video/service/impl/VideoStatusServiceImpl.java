@@ -25,7 +25,7 @@ public class VideoStatusServiceImpl implements VideoStatusService {
 
     @Transactional
     @Override
-    public void markReady(UUID videoId, UUID eventId, FFprobeResult result, String processedFilePath) {
+    public void markReady(UUID videoId, UUID eventId, FFprobeResult result, String processedFilePath, String thumbnailPath) {
 
         int updatedRows = videoRepository.markReady(
                 videoId,
@@ -37,7 +37,8 @@ public class VideoStatusServiceImpl implements VideoStatusService {
                 result.height(),
                 result.videoCodec(),
                 result.audioCodec(),
-                processedFilePath
+                processedFilePath,
+                thumbnailPath
         );
 
         if (updatedRows != 1) {
