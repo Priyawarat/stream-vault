@@ -2,13 +2,16 @@ import { Link } from "react-router-dom";
 import { FiClock, FiHardDrive, FiPlay } from "react-icons/fi";
 import StatusBadge from "../../../utils/StatusBadge";
 import { formatBytes, formatDate, shortId } from "../../../utils/formatters";
+import  {useVideoThumbnail} from "@/utils/useVideos.js";
 
 export default function VideoCard({ video }) {
+  const { thumbnail } = useVideoThumbnail(video.videoId);
+
   return (
     <article className="sv-card overflow-hidden transition hover:border-vault-brand/50">
       <div className="relative aspect-video bg-vault-surface">
         <img
-          src="/images/video-poster.svg"
+          src={thumbnail !== null ? thumbnail : "/images/video-poster.svg"}
           alt={`Thumbnail for ${video.fileName}`}
           className="h-full w-full object-cover opacity-80"
           loading="lazy"

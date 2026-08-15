@@ -40,6 +40,26 @@ export const uploadVideo = async (file, onProgress) => {
   }
 };
 
+export const fetchThumbnail = async (videoId) => {
+  const response = await apiClient.get(
+      ENDPOINTS.thumbnail(videoId),
+      {
+        responseType: "blob",
+      }
+  );
+
+  return URL.createObjectURL(response.data);
+};
+export const fetchAllVariants = async (videoId) => {
+  const { data } = await apiClient.get(ENDPOINTS.allVariants(videoId));
+  return data;
+};
+
+export const fetchVariant = async (videoId, variant) => {
+  const { data } = await apiClient.get(ENDPOINTS.variant(videoId, variant));
+  return data;
+};
+
 /**
  * The stream endpoints are JWT protected, so a plain <video src> cannot be used.
  * We fetch the bytes with the bearer token and hand the player an object URL.

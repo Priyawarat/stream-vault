@@ -8,6 +8,9 @@ export const ENDPOINTS = {
   upload: "/videos/upload",
   stream: (id) => `/videos/${id}/stream`,
   streamFull: (id) => `/videos/${id}/stream-full`,
+  thumbnail: (id) => `/videos/${id}/thumbnail`,
+  allVariants: (id) => `/videos/${id}/variants`,
+  variant: (id, variant) => `/videos/${id}/variants/${variant}/stream`,
 };
 
 export const ACCESS_TOKEN_KEY = "sv_access_token";
