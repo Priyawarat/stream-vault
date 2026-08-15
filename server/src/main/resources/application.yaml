@@ -5,9 +5,9 @@ spring:
     name: streamvault
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/streamvault
-    username: postgres
-    password: priye223@
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/streamvault}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:priye223@}
 
   jpa:
     hibernate:
@@ -24,7 +24,7 @@ spring:
       max-request-size: 2GB
 
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: kafka:29092
 
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -44,8 +44,8 @@ server:
   port: 8080
 
 storage:
-  location: uploads
+  location: /app/uploads
 
 logging:
   level:
-    com.priye.streamvault: DEBUG
+    com.priye.streamvault: ERROR

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-vault-bg text-vault-text font-sans antialiased; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { @apply bg-vault-border rounded-full; }
+}
+
+@layer components {
+  .sv-card { @apply bg-vault-card border border-vault-border rounded-2xl; }
+  .sv-input {
+    @apply w-full rounded-xl bg-vault-surface border border-vault-border px-4 py-3 text-sm
+           text-vault-text placeholder:text-vault-muted outline-none transition
+           focus:border-vault-brand focus:ring-2 focus:ring-vault-brand/25;
+  }
+  .sv-label { @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-vault-muted; }
+  .sv-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .sv-btn-primary { @apply sv-btn bg-vault-brand text-vault-bg hover:brightness-110 shadow-glow; }
+  .sv-btn-ghost { @apply sv-btn border border-vault-border bg-vault-surface text-vault-text hover:border-vault-brand/60; }
+  .sv-btn-danger { @apply sv-btn bg-vault-danger/15 text-vault-danger border border-vault-danger/30 hover:bg-vault-danger/25; }
+  .sv-badge { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold; }
+}

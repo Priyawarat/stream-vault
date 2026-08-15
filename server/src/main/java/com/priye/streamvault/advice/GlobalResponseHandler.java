@@ -1,6 +1,7 @@
 package com.priye.streamvault.advice;
 
 import org.springframework.core.MethodParameter;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
@@ -32,6 +33,10 @@ public class GlobalResponseHandler implements ResponseBodyAdvice<Object> {
         boolean isAllowed = allowedRoutes
                 .stream()
                 .anyMatch(route -> request.getURI().getPath().contains(route));
+
+        if (body instanceof Resource) {
+            return body;
+        }
 
         if(body instanceof ApiResponse<?> || isAllowed) {
             return body;
