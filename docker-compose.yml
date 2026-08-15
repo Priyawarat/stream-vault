@@ -1,22 +1,88 @@
-version: '3.8'
+version: '3.9'
 services:
+  stream-vault:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+
+    container_name: stream-vault-server
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/streamvault
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: priye223@
+
+    depends_on:
+      - postgres
+
+    restart: unless-stopped
+
+    networks:
+      - stream-vault-network
+  client:
+    build: ./client
+    container_name: client
+    ports:
+      - "5170:3000"
+    networks:
+      - stream-vault-network
+    depends_on:
+      - stream-vault
+    restart: unless-stopped
+
   kafka:
     image: apache/kafka:latest
     container_name: kafka-local
     ports:
       - "9092:9092"
     environment:
-      # Configure KRaft mode settings
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
-      # Define listeners for local connection
-      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9092'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+
+      KAFKA_LISTENERS: 'INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
+
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka:29092,EXTERNAL://localhost:9092'
+
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT'
-      # Auto-create topics for quick testing
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT'
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      LOG4J_LOGGER_ORG_APACHE_KAFKA: 'INFO'
+
+    networks:
+      - stream-vault-network
+
+  postgres:
+    image: postgres:17
+    container_name: postgres
+
+    ports:
+      - "5433:5432"
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: priye223@
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+    restart: unless-stopped
+
+    networks:
+      - stream-vault-network
+
+volumes:
+  postgres-data:
+
+networks:
+  stream-vault-network:
+    driver: bridge
