@@ -4,7 +4,6 @@ import com.priye.streamvault.common.enums.VideoStatus;
 import com.priye.streamvault.common.exception.ResourceNotFoundException;
 import com.priye.streamvault.video.dto.request.VideoUploadRequest;
 import com.priye.streamvault.video.dto.response.VideoListResponse;
-import com.priye.streamvault.video.dto.response.VideoStreamData;
 import com.priye.streamvault.video.dto.response.VideoUploadResponse;
 import com.priye.streamvault.video.entity.Video;
 import com.priye.streamvault.video.repository.VideoRepository;
@@ -83,17 +82,6 @@ public class VideoServiceImpl implements VideoService {
     }
 
     @Override
-    public VideoStreamData stream(UUID videoId) {
-
-        Video video = videoRepository.findById(videoId).orElseThrow(() ->
-                new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
-
-        Resource resource = storageService.load(video.getStoragePath());
-
-        return new VideoStreamData(resource, video.getContentType(), video.getOriginalFileName());
-    }
-
-    @Override
     public ResponseEntity<StreamingResponseBody> stream(UUID videoId, String range) {
 
         Video video = videoRepository.findById(videoId).orElseThrow(() ->
@@ -110,7 +98,7 @@ public class VideoServiceImpl implements VideoService {
             long fileSize = resource.contentLength();
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(video.getContentType()));
+            headers.setContentType(MediaType.parseMediaType("video/mp4"));
             headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
 
             if (range == null || range.isBlank()) {
@@ -228,10 +216,34 @@ public class VideoServiceImpl implements VideoService {
                         video.getFileSize(),
                         video.getContentType(),
                         video.getStatus(),
+                        "/v1/videos/" + video.getId() + "/thumbnail",
+                        "/v1/videos/" + video.getId() + "/stream",
                         video.getCreatedAt()
                 ))
                 .toList();
 
         return videoListResponses;
+    }
+
+    @Override
+    public ResponseEntity<Resource> getThumbnail(UUID videoId) {
+
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new ResourceNotFoundException("VIDEO_NOT_FOUND", "Video not found with id: " + videoId));
+
+        if (video.getStatus() != VideoStatus.READY) {
+            throw new IllegalStateException("Video is not ready");
+        }
+
+        if (video.getThumbnailPath() == null) {
+            throw new ResourceNotFoundException("THUMBNAIL_NOT_FOUND", "Thumbnail not found for video: " + videoId);
+        }
+
+        Resource resource = storageService.load(video.getThumbnailPath());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + video.getId() + ".jpg\"")
+                .body(resource);
     }
 }

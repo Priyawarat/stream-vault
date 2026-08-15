@@ -74,20 +74,21 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     @Modifying
     @Query("""
-    UPDATE Video v
-    SET v.status = :readyStatus,
-        v.processingEventId = NULL,
-        v.duration = :duration,
-        v.width = :width,
-        v.height = :height,
-        v.videoCodec = :videoCodec,
-        v.audioCodec = :audioCodec,
-        v.processedFilePath = :processedFilePath,
-        v.updatedAt = CURRENT_TIMESTAMP
-    WHERE v.id = :videoId
-      AND v.status = :processingStatus
-      AND v.processingEventId = :eventId
-    """)
+        UPDATE Video v
+        SET v.status = :readyStatus,
+            v.processingEventId = NULL,
+            v.duration = :duration,
+            v.width = :width,
+            v.height = :height,
+            v.videoCodec = :videoCodec,
+            v.audioCodec = :audioCodec,
+            v.processedFilePath = :processedFilePath,
+            v.thumbnailPath = :thumbnailPath,
+            v.updatedAt = CURRENT_TIMESTAMP
+        WHERE v.id = :videoId
+          AND v.status = :processingStatus
+          AND v.processingEventId = :eventId
+        """)
     int markReady(
             @Param("videoId") UUID videoId,
             @Param("eventId") UUID eventId,
@@ -98,6 +99,7 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
             @Param("height") Integer height,
             @Param("videoCodec") String videoCodec,
             @Param("audioCodec") String audioCodec,
-            @Param("processedFilePath") String processedFilePath
+            @Param("processedFilePath") String processedFilePath,
+            @Param("thumbnailPath") String thumbnailPath
     );
 }
