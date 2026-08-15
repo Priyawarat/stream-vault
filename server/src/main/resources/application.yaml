@@ -38,7 +38,7 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
       properties:
         spring.json.trusted.packages: com.priye.streamvault.video.kafka
-        spring.json.value.default.type: com.priye.streamvault.video.kafka.VideoEvent
+        spring.json.value.default.type: com.priye.streamvault.messaging.kafka.VideoEvent
 
 server:
   port: 8080
@@ -48,4 +48,4 @@ storage:
 
 logging:
   level:
-    com.priye.streamvault: ERROR
+    com.priye.streamvault: DEBUG

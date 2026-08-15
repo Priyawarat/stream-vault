@@ -1,6 +1,6 @@
 package com.priye.streamvault.common.config;
 
-import com.priye.streamvault.user.entity.User;
+import com.priye.streamvault.auth.entity.User;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 public class AuthContextHolder {

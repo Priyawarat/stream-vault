@@ -1,7 +1,7 @@
 package com.priye.streamvault.common.config;
 
-import com.priye.streamvault.user.service.JwtService;
-import com.priye.streamvault.user.service.UserService;
+import com.priye.streamvault.auth.service.JwtService;
+import com.priye.streamvault.auth.service.UserService;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
