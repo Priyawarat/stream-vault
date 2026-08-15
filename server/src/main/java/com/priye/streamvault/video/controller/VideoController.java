@@ -1,12 +1,12 @@
 package com.priye.streamvault.video.controller;
 
-import com.priye.streamvault.user.entity.User;
+import com.priye.streamvault.auth.entity.User;
 import com.priye.streamvault.video.dto.request.VideoUploadRequest;
 import com.priye.streamvault.video.dto.response.VideoListResponse;
 import com.priye.streamvault.video.dto.response.VideoUploadResponse;
 import com.priye.streamvault.video.dto.response.VideoVariantResponse;
 import com.priye.streamvault.video.service.VideoService;
-import com.priye.streamvault.video.service.VideoVariantService;
+import com.priye.streamvault.processing.variant.VideoVariantService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;

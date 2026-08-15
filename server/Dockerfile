@@ -10,7 +10,7 @@ COPY .mvn .mvn
 COPY mvnw .
 
 # Make Maven Wrapper executable
-RUN chmod +x mvnw
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
 
 # Copy Maven configuration
 COPY pom.xml .
