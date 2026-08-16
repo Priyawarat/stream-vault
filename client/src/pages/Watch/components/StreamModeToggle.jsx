@@ -1,6 +1,6 @@
 const MODES = [
   { key: "range", label: "Range stream", hint: "/stream" },
-  { key: "full", label: "Full stream", hint: "/stream-full" },
+  { key: "full", label: "Full stream", hint: "/stream" },
 ];
 
 export default function StreamModeToggle({ mode, onChange }) {

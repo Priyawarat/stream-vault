@@ -7,7 +7,7 @@ export const ENDPOINTS = {
   videos: "/videos",
   upload: "/videos/upload",
   stream: (id) => `/videos/${id}/stream`,
-  streamFull: (id) => `/videos/${id}/stream-full`,
+  streamFull: (id) => `/videos/${id}/stream`,
   thumbnail: (id) => `/videos/${id}/thumbnail`,
   allVariants: (id) => `/videos/${id}/variants`,
   variant: (id, variant) => `/videos/${id}/variants/${variant}/stream`,
