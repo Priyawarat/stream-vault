@@ -25,6 +25,7 @@ Built as a focused hackathon project with one goal: **show strong backend engine
 - [Status Transition History](#-status-transition-history)
 - [API Overview](#-api-overview)
 - [Local Setup](#-local-setup)
+- [Docker Setup](#-docker-setup)
 - [Production Evolution](#-production-evolution)
 - [Technical Summary](#-technical-summary)
 
@@ -94,6 +95,7 @@ That engineering around the video upload is the core of StreamVault.
 | **Spring Data JPA / Hibernate** | Database persistence |
 | **Maven** | Build and dependency management |
 | **Local Filesystem** | Video file storage |
+| **Docker / Docker Compose** | Local multi-service runtime |
 
 ---
 
@@ -131,7 +133,7 @@ That engineering around the video upload is the core of StreamVault.
                              ▼
                   ┌─────────────────────┐
                   │ 🗄️ PostgreSQL       │
-                  │ Status = UPLOADED   │
+                  │ Status = UPLOADED  │
                   └──────────┬──────────┘
                              │
                              ▼
@@ -163,7 +165,7 @@ That engineering around the video upload is the core of StreamVault.
                  │           │           │
                  ▼           ▼           ▼
          ┌────────────┐ ┌────────────┐ ┌─────────────┐
-         │ 🔎 FFprobe │ │ ⚙️ FFmpeg │ │ 🖼️ Thumbnail│
+         │ 🔎 FFprobe │ │ ⚙️ FFmpeg  │ │ 🖼️ Thumbnail│
          │ Metadata   │ │ Variations │ │ Generation  │
          └─────┬──────┘ └─────┬──────┘ └──────┬──────┘
                │              │               │
@@ -758,8 +760,7 @@ The core video surface is intentionally small:
 |---|---|---|
 | `POST` | `/v1/videos/upload` | Upload a video |
 | `GET` | `/v1/videos` | Retrieve available videos |
-| `GET` | `/v1/videos/{videoId}/stream-full` | Stream the stored resource |
-| `GET` | `/v1/videos/{videoId}/stream` | Stream using HTTP Range requests |
+| `GET` | `/v1/videos/{videoId}/stream` | Stream the processed video; supports full responses and HTTP Byte-Range requests |
 
 Authentication endpoints are also available for registration and login.
 
@@ -767,10 +768,14 @@ Authentication endpoints are also available for registration and login.
 
 ## ▶️ Local Setup
 
+StreamVault can be run directly on the local machine when you want to work with the services individually.
+
 ### Prerequisites
 
-- Java
-- Maven
+Install or make available:
+
+- Java 21
+- Maven (or use the included Maven Wrapper)
 - PostgreSQL
 - Apache Kafka
 - FFmpeg
@@ -783,16 +788,154 @@ ffmpeg -version
 ffprobe -version
 ```
 
-### Start the application
+### Configure PostgreSQL
+
+For a local Spring Boot run, the default PostgreSQL configuration in `application.yml` is:
+
+```yaml
+datasource:
+  url: jdbc:postgresql://localhost:5432/streamvault
+  username: postgres
+  password: priye223@
+```
+
+The Docker Compose backend uses the same database credentials through environment variables, but connects to the PostgreSQL service by its Docker hostname:
+
+```yaml
+SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/streamvault
+SPRING_DATASOURCE_USERNAME: postgres
+SPRING_DATASOURCE_PASSWORD: priye223@
+```
+
+This gives two connection modes:
+
+- **Local application:** `localhost:5432/streamvault`
+- **Docker application:** `postgres:5432/streamvault`
+
+To inspect the database, you can use **DBeaver, pgAdmin, IntelliJ Database Tools, or `psql`**. For a direct local connection, use:
+
+```text
+Host: localhost
+Port: 5432
+Database: streamvault
+Username: postgres
+Password: priye223@
+```
+
+When using Docker Compose, PostgreSQL is exposed using the port mapping defined in `docker-compose.yml`; connect through the mapped host port from your database client.
+
+These credentials are intended for the local hackathon environment. A production deployment should use environment-managed secrets instead of committed default credentials.
+
+### Start PostgreSQL and Kafka
+
+Start PostgreSQL and Kafka before launching the Spring Boot application. For a local Kafka run, make sure the application is configured to connect to your local Kafka listener (for example, `localhost:9092`).
+
+### Build the application
+
+Using Maven:
 
 ```bash
 mvn clean install
+```
+
+Or on Windows with the Maven Wrapper:
+
+```powershell
+.\mvnw.cmd clean install
+```
+
+### Run Spring Boot
+
+```bash
 mvn spring-boot:run
 ```
 
-Start PostgreSQL and Kafka locally before launching the application, and ensure the media tools are available on the system path.
+Or on Windows:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The backend runs on the configured Spring Boot server port (8080 in the current Docker/local setup).
 
 ---
+
+## 🐳 Docker Setup
+
+For the quickest way to run the complete StreamVault stack, use the provided Docker Compose configuration.
+
+The Compose setup runs the main application services together:
+
+```text
+🎨 React Frontend
+       │
+       ▼
+🌱 Spring Boot Backend
+       │
+       ├────────► 🗄️ PostgreSQL
+       │
+       └────────► 📨 Kafka
+```
+
+### Prerequisites
+
+- Docker Desktop
+- Docker Compose support (included with current Docker Desktop releases)
+
+### Start the full stack
+
+Run this command from the directory containing `docker-compose.yml`:
+
+```bash
+docker compose up --build -d
+```
+
+This builds the frontend and backend images and starts the application dependencies together.
+
+### Check service status
+
+```bash
+docker compose ps
+```
+
+### View logs
+
+All services:
+
+```bash
+docker compose logs -f
+```
+
+Backend only:
+
+```bash
+docker compose logs -f stream-vault
+```
+
+### Access the application
+
+With the current Compose configuration:
+
+- Frontend: `http://localhost:5170`
+- Backend API: `http://localhost:8080`
+- Kafka: `localhost:9092`
+- PostgreSQL: exposed on `localhost:5433`
+
+Inside the Docker network, the backend communicates with Kafka and PostgreSQL using their Compose service names and internal ports.
+
+### Stop the stack
+
+```bash
+docker compose down
+```
+
+This stops and removes the containers while keeping the named PostgreSQL volume.
+
+### Start again without rebuilding
+
+```bash
+docker compose up -d
+```
 
 ## 🚀 Quick Demo Flow
 
