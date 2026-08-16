@@ -1,0 +1,772 @@
+
+                                      VIDEO HOSTING PLATFORM
+
+                                         +-------------------+
+                                         | React / Postman   |
+                                         +---------+---------+
+                                                   |
+                                                   |
+                                        1. Upload Video API
+                                                   |
+                                                   ▼
+                                 +----------------------------------+
+                                 |      Spring Boot API             |
+                                 |       VideoController            |
+                                 +----------------------------------+
+                                                   |
+                                      Rate Limiter (Redis)      (Sourav)
+                             Prevent upload abuse (100 req/min)
+                                                   |
+                                                   ▼
+                                      Authentication (JWT) (Sourav)
+                                                   |
+                                                   ▼
+                                      Idempotency Check
+                           (Avoid duplicate upload on retry)
+                                                   |
+                                                   ▼
+                                      Generate Video ID
+                                                   |
+                                                   ▼
+                                 Store Video File (Disk / MinIO)
+                                                   |
+                                                   ▼
+                               Save Metadata (Status = UPLOADED)
+                                        PostgreSQL
+                                                   |
+                                                   ▼
+                                  Save Outbox Event (Same TX)
+                         Event = VIDEO_UPLOADED
+                                                   |
+                              --------------------------------
+                              |                              |
+                              | Transaction Commit           |
+                              --------------------------------
+                                                   |
+                                                   ▼
+                                   Outbox Publisher Scheduler
+                                                   |
+                                                   ▼
+                                            Kafka Topic
+                                        video-uploaded
+                                                   |
+                     -------------------------------------------------
+                     |                                               |
+                     ▼                                               ▼
+           Processing Service                              Notification Service
+                     |                                               |
+                     |                                               |
+            Consume Kafka Event                            "Video uploaded"
+                     |                                               |
+                     ▼                                               ▼
+            Distributed Lock (Redis)
+     (Only one processor handles video)
+                     |
+                     ▼
+                Download Video
+                     |
+                     ▼
+         FFprobe -> Read Metadata
+      (duration, codec, resolution)
+                     |
+                     ▼
+               FFmpeg Processing
+         -------------------------------
+         |             |              |
+         ▼             ▼             ▼
+      1080p         720p           480p
+         |
+         ▼
+     Generate Thumbnail
+         |
+         ▼
+ Upload Processed Files
+      (Disk / MinIO)
+         |
+         ▼
+ Update Database
+ Status = READY
+ Duration
+ Thumbnail URL
+ Video URLs
+         |
+         ▼
+ Publish Kafka Event
+ VIDEO_PROCESSED
+         |
+         ▼
+ Notification Service
+ "Your video is ready"
+         |
+         ▼
+ User can Stream Video
+
+
+
+----------------------- FAILURE FLOW -----------------------
+
+Kafka Consumer
+      |
+      ▼
+Processing Failed?
+      |
+   YES
+      |
+ Retry (3 Times)
+      |
+Still Failed?
+      |
+      ▼
+Dead Letter Queue (DLQ)
+      |
+Manual Retry API
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timeline of a single video
+
+t = 0 sec
+
+User uploads video
+
+↓
+
+API returns immediately
+Status = UPLOADED
+
+↓
+
+Kafka Event Published
+
+↓
+
+Processing starts
+
+↓
+
+FFprobe reads metadata
+
+↓
+
+FFmpeg creates
+1080p
+720p
+480p
+Thumbnail
+
+↓
+
+Database updated
+
+↓
+
+Status = READY
+
+↓
+
+User can watch video
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Concept 1 :
+
+OUTBOX PATTERN USE CASE :  Inconsistent state
+
+Suppose : User hits - > Post : /upload/
+
+Step 1 : Video saved       ✅
+Step 2 : Metadata saved    ✅
+Step 3 : Kafka crashed     ❌
+
+DB Status = UPLOADED but Processing Service didn't received so Video Forever Status Stucked = UPLOADED
+
+
+Resolution :
+
+Save Video
+
+↓
+
+Save Metadata
+
+↓
+
+Save Outbox Event
+
+If Outbox contains : VIDEO_UPLOADED and Status = PENDING then Then every few seconds
+
+Outbox Scheduler
+
+↓
+
+Find Pending Events
+
+↓
+
+Send Kafka
+
+↓
+
+Mark Event = SENT
+
+Even if Kafka is down for one hour, Nothing is lost. Outbox purpose is Never lose an event even if Kafka is unavailable.
+
+
+
+Concept 2 :
+
+Distributed Lock REDIS : Suppose tomorrow application grows
+
+And we have multiple Processor for processing video
+
+Processing Service 1 -> Kafka topic = video-upload
+
+Processing Service 2 -> Kafka topic = video-upload
+
+Processing Service 3 -> Kafka topic = video-upload
+
+Processing Service 4 -> Kafka topic = video-upload
+
+
+All consume the same Kafka topic = video-upload
+
+Imagine Kafka accidentally delivers the same event twice.
+
+
+VIDEO123
+
+↓
+
+Worker 1
+
+Worker 2
+
+Both worker will start working and Generating thumbnail, Generating 720p, Generating 1080p etc and Both upload files.
+
+
+Redis Lock prevents this :
+
+Worker 1 asks Redis - Can I process VIDEO123 ?
+
+Redis says - YES Lock created.
+
+Worker 2 asks Redis - Can I process VIDEO123 ?
+
+Redis replies - NO Already processing.
+
+Worker 2 simply exits.
+
+Only one worker processes the video and Only one server can work on one video at one time.
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Concepts we are covering here :
+
+✅ Microservice communication (Kafka)
+✅ Event-driven architecture
+✅ Async processing
+✅ Outbox Pattern
+✅ Redis Rate Limiting
+✅ Distributed Locking
+✅ Retry + DLQ
+✅ File Storage
+✅ Video Processing (FFmpeg)
+✅ Production-like design
+
+
+
+| Kafka                     ✅
+| Outbox Pattern            ✅
+| FFmpeg Processing         ✅
+| State Machine             ✅
+| Rate Limiting             ✅
+| Redis Cache               ✅
+| Distributed Lock          ✅
+| Retry + DLQ               ✅
+| Scheduler                 ✅
+| Validation                ✅
+| Global Exception Handler  ✅
+| DTO + Mapper              ✅
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Tables and DB Schema :
+
+1. video
+2. video_variant
+3. video_processing_job
+4. outbox_event
+5. processing_log
+6. user
+7. video_view (optional)
+
+
+1. VIDEO (Main Table)  -> Purpose = Stores everything about the original uploaded video.
+
+One uploaded video = One row.
+
+VIDEO
+----------------------
+id (UUID)
+
+user_id
+
+title
+
+description
+
+original_filename
+
+storage_path
+
+status
+
+duration
+
+thumbnail_url
+
+default_resolution
+
+file_size
+
+mime_type
+
+created_at
+
+updated_at
+
+
+Example :
+
+id = V101
+
+title = Spring Boot Tutorial
+
+status = READY
+
+duration = 15m 30s
+
+thumbnail =
+/thumbnail/V101.jpg
+
+storage_path =
+videos/original/V101.mp4
+
+----------------------------------------------------
+
+2. VIDEO_VARIANT
+
+One video produces many files.
+
+Original ->  1080p, 720p, 480p
+
+VIDEO_VARIANT
+
+id
+
+video_id
+
+resolution
+
+storage_path
+
+size
+
+bitrate
+
+status
+
+created_at
+
+
+Example :
+
+Row 1:
+Video 101
+1080p
+/videos/1080/V101.mp4
+
+
+Row 2:
+Video 101
+720p
+/videos/720/V101.mp4
+
+-------------------------------------------------
+
+3. VIDEO_PROCESSING_JOB -> Purpose = Track processing history.
+
+Whenever Kafka starts processing, create one processing job.
+
+PROCESSING_JOB
+
+id
+
+video_id
+
+status
+
+worker_name
+
+started_at
+
+completed_at
+
+error_message
+
+
+Example :
+
+Video101
+
+PROCESSING
+
+Worker-3
+
+Later - COMPLETED / FAILED (FFmpeg Error)
+
+
+-------------------------------------------------------------
+
+4. OUTBOX_EVENT
+
+
+
+id
+
+aggregate_type
+
+aggregate_id
+
+event_type
+
+payload
+
+status
+
+retry_count
+
+created_at
+
+published_at
+
+
+------------------------------------------------------------
+
+5. PROCESSING_LOG -> Purpose = Logging
+
+Suppose FFmpeg crashes. Instead of checking logs, store them.
+
+PROCESSING_LOG
+
+id
+
+video_id
+
+step
+
+status
+
+message
+
+created_at
+
+-----------------------------------------------------------
+
+6. USER -> End User Details (minimal use case)
+
+id
+
+name
+
+email
+
+password
+
+created_at
+
+
+---------------------------------------------------------
+
+7. VIDEO_VIEW (Optional) If time permits.
+
+VIDEO_VIEW -> Purpose = Records and views, Analytics and Popular Videos
+
+id
+
+video_id
+
+user_id
+
+watch_duration
+
+viewed_at
+
+---------------------------------------------------------
+
+RELATION SHIPS :
+
+USER
+ |
+ | 1
+ |
+ | N
+VIDEO
+ |
+ | 1
+ |
+ | N
+VIDEO_VARIANT
+
+VIDEO
+ |
+ | 1
+ |
+ | N
+PROCESSING_JOB
+
+VIDEO
+ |
+ | 1
+ |
+ | N
+PROCESSING_LOG
+
+VIDEO
+ |
+ | 1
+ |
+ | N
+OUTBOX_EVENT
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+APIs Required and Analysis :
+
+1. Register User = POST /api/v1/auth/register
+
+2. Login =  POST /api/v1/auth/login (Not so important for show case)
+
+3. Upload Video = POST /api/v1/videos -> Purpose = Upload original file, Save metadata and Publish Kafka Event
+
+4. Get Video Details = GET /videos/{videoId} -> Purpose = Title, Description, Duration, Status, Thumbnail, Available Qualities etc
+
+5. List My Videos = GET /videos/my -> My Uploaded videos
+
+6. Stream Video = GET /videos/{id}/stream -> Purpose = Browser starts playing immediately.
+
+7. Stream by Resolution = GET /videos/{id}/stream?quality=720
+
+8. Delete Video = DELETE /videos/{id} -> Purpose = To delete the uploaded video
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Stream or Display video content :
+
+Calculation of bytes:
+
+1 bit = 0 or 1
+
+1 Byte = 8 bits
+
+Example : 01000001 = In programming, file sizes and HTTP Range values are expressed in bytes, not bits.
+
+1 MiB = 1,048,576 bytes
+
+1 MB ≈ 1,000,000 bytes -> This is commonly used for storage/network specifications.
+
+Range: bytes=0-999999 -> contains = 1,000,000 bytes because both endpoints are inclusive 999999 - 0 + 1 = 1,000,000
+
+------------------------------------------------------------------------
+
+How does browser decide the next range ??
+
+Total MB of uploaded video = 2.68 MB
+
+First request:
+bytes=0-999999 => 999999 - 0 + 1 = 1,000,000 = 1MB
+
+Second request:
+bytes=1000000-1999999 => 1999999 - 1000000 + 1 = 1,000,000 = 1MB
+
+Third request:
+bytes=2000000-2679999 => 2679999 - 2000000 + 1 = 680,000 = .68 MB
+
+The exact chunk sizes are not something we should hard-code as "Chrome always requests 1 MB." Different browsers, players, network conditions, and implementations can request different ranges.
+
+Our server simply needs to correctly understand: Range: bytes=start-end and return those bytes.
+
+-----------------------------------------------------------------------
+
+What if browser asks beyond the video ??
+
+Suppose our video is only: 2,680,000 bytes So valid byte range are: 0 → 2,679,999
+
+But browser asks: Range: bytes=3000000-3999999 Those bytes don't exist. Our server should not try to manufacture them.
+
+Response:
+Error : 416 Range Not Satisfiable
+
+because the requested range cannot be satisfied.
+
+---------------------------------------------------------------------
+
+What if browser asks partially beyond the end ??
+
+browser asks: Range: bytes=2500000-3000000, The requested end is beyond the file.
+
+but bytes from 2,500,000 → 2,679,999 do exist.
+
+A server can satisfy the request with the available portion and respond with something like:
+
+Response:
+206 Partial Content
+Content-Range: bytes 2500000-2679999/2680000
+
+You asked up to 3,000,000, but the file ends at 2,679,999. Here is the remaining available portion.
+
+--------------------------------------------------------------------
+
+Where does the browser get the information to calculate video position ??
+
+A video isn't simply: 1 second = exactly X bytes, It's not that simple.
+
+For example, a video might have:
+
+0:00 → 5 MB
+0:10 → 8 MB
+0:20 → 12 MB
+
+because compression varies depending on the video content and A complicated scene may require more data than a simple static scene.
+
+The browser/video player understands the video's media structure and uses information such as:
+
+duration
+timestamps
+codecs
+bitrate
+keyframes
+container metadata
+
+to determine what data it needs.
+
+For seeking, the browser can request an appropriate byte range rather than downloading the whole file.
+
+So our StreamVault server doesn't calculate "5 seconds = X bytes". We are not going to write:
+
+❌ We don't do that.
+5 seconds = 2 MB
+10 seconds = 4 MB
+
+
+Our responsibility is much simpler:
+
+Browser
+   │
+   │ Range: bytes=1000000-1999999
+   ▼
+StreamVault
+   │
+   │ Read bytes 1000000 → 1999999
+   ▼
+Local video file
+   │
+   ▼
+Return those bytes
+
+The browser/video player handles the media playback logic.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Complete interaction and flow for stream or display a uploaded video
+
+                 BROWSER
+                    │
+                    │ GET /stream
+                    │ Range: bytes=0-999999
+                    ▼
+             ┌──────────────┐
+             │ StreamVault  │
+             │ Spring Boot  │
+             └──────┬───────┘
+                    │
+                    │ Check DB
+                    ▼
+               PostgreSQL
+                    │
+                    │ storagePath
+                    ▼
+             Local MP4 File
+                    │
+                    │ Read requested bytes
+                    ▼
+             0 → 999999
+                    │
+                    ▼
+              HTTP 206
+                    │
+                    │ Content-Range:
+                    │ bytes 0-999999/2680000
+                    ▼
+                 BROWSER
+                    │
+                    ▼
+                   🎬
+
+Note : The browser chooses the Range. Our Spring Boot server's job is to validate the Range, read those bytes from the file, and return them correctly with 206 Partial Content.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Range Calculation :
+
+Range endpoints are inclusive
+
+Range: bytes=0-10 means Give me byte 0 through byte 10, including both 0 and 10
+
+0   1  2  3   4   5  6  7  8   9  10
+│  │  │  │  │  │  │  │  │  │   │
+└─────── 11 bytes ──────────┘
+
+Number of bytes = end - start + 1 = 10 - 0 + 1 = 11 bytes
+
+If we want exactly 10 bytes, starting at byte 0, the range must be: Range: bytes=0-9 because 9 - 0 + 1 = 10 bytes
+
+
+Another example :
+
+If we want exactly 1,000,000 bytes:
+start = 0
+then: end = 999,999
+because: 999,999 - 0 + 1 = 1,000,000
+
+so If we requested: Range: bytes=0-1000000, If we requested: 1,000,001 bytes And this is why the last byte is size - 1
+
+Suppose your video has exactly: 100 bytes The byte positions are: 0, 1, 2, ... 98, 99
+
+There is no byte 100.
+
+Therefore :
+First byte = 0
+Last byte  = 99
+Total      = 100 bytes
+
+So, lastByte = totalSize - 1
+
+Same as Array of byte -> byte[] data = new byte[100];
+
+data[0]   ← first
+data[99]  ← last
+
+and there is no data[100]
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+UI directly testing url :
+
+http://localhost:8080/test-video.html
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
