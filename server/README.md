@@ -754,15 +754,46 @@ This makes the processing lifecycle easy to audit without relying only on runtim
 
 ## 🔌 API Overview
 
-The core video surface is intentionally small:
+The following REST endpoints are currently implemented in StreamVault.
+
+### 🔐 Authentication APIs
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `POST` | `/v1/videos/upload` | Upload a video |
-| `GET` | `/v1/videos` | Retrieve available videos |
-| `GET` | `/v1/videos/{videoId}/stream` | Stream the processed video; supports full responses and HTTP Byte-Range requests |
+| `POST` | `/v1/users/register` | Register a new user account |
+| `POST` | `/v1/users/login` | Authenticate a user and issue an access token; refresh token is stored in an HttpOnly cookie |
+| `POST` | `/v1/users/refresh-token` | Generate a new access token using the refresh token cookie |
 
-Authentication endpoints are also available for registration and login.
+### 🎥 Video APIs
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/v1/videos/upload` | Upload a video and create its processing workflow |
+| `GET` | `/v1/videos` | Retrieve videos currently available with `READY` status |
+| `GET` | `/v1/videos/{videoId}/stream` | Stream the processed video; supports full responses and HTTP Byte-Range requests through the optional `Range` header |
+| `GET` | `/v1/videos/{videoId}/thumbnail` | Retrieve the generated JPEG thumbnail for a ready video |
+| `GET` | `/v1/videos/{videoId}/variants` | Retrieve the generated video variants and their metadata |
+| `GET` | `/v1/videos/{videoId}/variants/{resolution}/stream` | Stream a specific ready video variant; also supports the optional `Range` header |
+
+### 📌 Streaming behavior
+
+The application uses **one endpoint** for the main processed video stream:
+
+```http
+GET /v1/videos/{videoId}/stream
+```
+
+With no `Range` header, the API returns the complete processed resource with `200 OK`.
+
+With a valid `Range` header such as:
+
+```http
+Range: bytes=0-999999
+```
+
+the API returns `206 Partial Content` with the appropriate `Content-Range` and `Content-Length` headers.
+
+Invalid ranges are rejected with `416 Requested Range Not Satisfiable`.
 
 ---
 
